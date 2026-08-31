@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { LEVELS } from './data/levels';
 import type { LevelProgress, VehicleType } from './types/game';
@@ -118,6 +118,21 @@ export const App: React.FC = () => {
     return saved ? parseInt(saved) : 0;
   });
 
+  // State Refs to prevent stale closure inside network event subscribers
+  const player1Ref = useRef(player1);
+  const player2Ref = useRef(player2);
+  const matchLevelIdsRef = useRef(matchLevelIds);
+  const totalRoundsRef = useRef(totalRounds);
+  const currentRoundRef = useRef(currentRound);
+  const timeLimitPerRoundRef = useRef(timeLimitPerRound);
+
+  useEffect(() => { player1Ref.current = player1; }, [player1]);
+  useEffect(() => { player2Ref.current = player2; }, [player2]);
+  useEffect(() => { matchLevelIdsRef.current = matchLevelIds; }, [matchLevelIds]);
+  useEffect(() => { totalRoundsRef.current = totalRounds; }, [totalRounds]);
+  useEffect(() => { currentRoundRef.current = currentRound; }, [currentRound]);
+  useEffect(() => { timeLimitPerRoundRef.current = timeLimitPerRound; }, [timeLimitPerRound]);
+
   // Level progress tracking
   const [progress, setProgress] = useState<Record<number, LevelProgress>>(() => {
     const saved = localStorage.getItem('limit_bridge_progress_100');
@@ -203,14 +218,14 @@ export const App: React.FC = () => {
       switch (packet.type) {
         case 'JOIN_REQUEST': {
           const guestPlayer = packet.payload.player as PlayerState;
-          if (guestPlayer && guestPlayer.id !== player1.id) {
+          if (guestPlayer && guestPlayer.id !== player1Ref.current.id) {
             setPlayer2(guestPlayer);
             soundManager.playSuccess();
-            // Host responds immediately with JOIN_ACCEPT
+            // Host responds immediately with Host's UP-TO-DATE info (name, vehicle, settings)!
             multiplayerService.sendPacket('JOIN_ACCEPT', {
-              host: player1,
+              host: player1Ref.current,
               guest: guestPlayer,
-              settings: { totalRounds, timeLimitSec: timeLimitPerRound },
+              settings: { totalRounds: totalRoundsRef.current, timeLimitSec: timeLimitPerRoundRef.current },
             });
           }
           break;
@@ -236,8 +251,11 @@ export const App: React.FC = () => {
           const levels = packet.payload.levels as number[];
           if (levels && levels.length > 0) {
             setMatchLevelIds(levels);
+            matchLevelIdsRef.current = levels;
             setCurrentRound(1);
             setCurrentLevelId(levels[0]);
+            setRoundTimeLeft(timeLimitPerRoundRef.current || 30);
+            setIsMultiplayerEndOpen(false);
             setIsMultiplayer(true);
             setIsMultiplayerLobbyOpen(false);
             setViewMode('game');
@@ -249,7 +267,7 @@ export const App: React.FC = () => {
 
         case 'CHOICE_SUBMITTED': {
           const { playerId, choice, isCorrect } = packet.payload;
-          if (playerId !== player1.id) {
+          if (playerId !== player1Ref.current.id) {
             setPlayer2((prev) => ({
               ...prev,
               hasAnswered: true,
@@ -264,13 +282,13 @@ export const App: React.FC = () => {
 
         case 'POWER_UP_CAST': {
           const { powerUp, targetId } = packet.payload;
-          if (targetId === player1.id || packet.senderId !== player1.id) {
+          if (targetId === player1Ref.current.id || packet.senderId !== player1Ref.current.id) {
             soundManager.playAttack();
-            const hasShield = player1.activeEffects.some((e) => e.type === 'shield');
+            const hasShield = player1Ref.current.activeEffects.some((e: any) => e.type === 'shield');
             if (hasShield) {
               setPlayer1((prev) => ({
                 ...prev,
-                activeEffects: prev.activeEffects.filter((e) => e.type !== 'shield'),
+                activeEffects: prev.activeEffects.filter((e: any) => e.type !== 'shield'),
               }));
             } else {
               const durationMs = powerUp === 'fog' ? 6000 : 5000;
@@ -292,10 +310,12 @@ export const App: React.FC = () => {
 
         case 'NEXT_ROUND': {
           const nextR = packet.payload.roundIndex;
-          if (nextR <= totalRounds && matchLevelIds[nextR - 1]) {
+          const levelId = packet.payload.levelId;
+          const maxR = totalRoundsRef.current;
+          if (nextR <= maxR) {
             setCurrentRound(nextR);
-            setCurrentLevelId(matchLevelIds[nextR - 1]);
-            setRoundTimeLeft(timeLimitPerRound);
+            if (levelId) setCurrentLevelId(levelId);
+            setRoundTimeLeft(timeLimitPerRoundRef.current);
             setSelectedChoice(null);
             setIsDriving(false);
             setDriveResult('none');
@@ -316,7 +336,7 @@ export const App: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, [player1.id, totalRounds, matchLevelIds, timeLimitPerRound]);
+  }, []);
 
   // --- MULTIPLAYER HANDLERS ---
 
@@ -478,14 +498,17 @@ export const App: React.FC = () => {
 
   const handleStartOnlineMatch = () => {
     const pickedLevels: number[] = [];
-    for (let i = 0; i < totalRounds; i++) {
+    const rCount = totalRoundsRef.current || 5;
+    for (let i = 0; i < rCount; i++) {
       pickedLevels.push(Math.floor(Math.random() * LEVELS.length) + 1);
     }
     setMatchLevelIds(pickedLevels);
+    matchLevelIdsRef.current = pickedLevels;
     setCurrentRound(1);
     setCurrentLevelId(pickedLevels[0]);
+    setRoundTimeLeft(timeLimitPerRoundRef.current || 30);
+    setIsMultiplayerEndOpen(false);
     setIsMultiplayer(true);
-    setRoundTimeLeft(timeLimitPerRound);
 
     multiplayerService.sendPacket('GAME_START', { levels: pickedLevels });
     setIsMultiplayerLobbyOpen(false);
@@ -510,18 +533,25 @@ export const App: React.FC = () => {
   };
 
   const handleNextMultiplayerRound = () => {
-    const nextR = currentRound + 1;
-    if (nextR <= totalRounds && matchLevelIds[nextR - 1]) {
+    const currR = currentRoundRef.current;
+    const nextR = currR + 1;
+    const maxR = totalRoundsRef.current;
+
+    if (nextR <= maxR) {
+      const levelsList = matchLevelIdsRef.current;
+      const nextLevelId = levelsList[nextR - 1] || Math.floor(Math.random() * LEVELS.length) + 1;
+
       setCurrentRound(nextR);
-      setCurrentLevelId(matchLevelIds[nextR - 1]);
-      setRoundTimeLeft(timeLimitPerRound);
+      setCurrentLevelId(nextLevelId);
+      setRoundTimeLeft(timeLimitPerRoundRef.current);
       setSelectedChoice(null);
       setIsDriving(false);
       setDriveResult('none');
       setPlayer1((prev) => ({ ...prev, hasAnswered: false, currentChoice: null, isCorrect: null }));
       setPlayer2((prev) => ({ ...prev, hasAnswered: false, currentChoice: null, isCorrect: null }));
+
       if (isHost && multiplayerMode !== 'local') {
-        multiplayerService.sendPacket('NEXT_ROUND', { roundIndex: nextR });
+        multiplayerService.sendPacket('NEXT_ROUND', { roundIndex: nextR, levelId: nextLevelId });
       }
     } else {
       setIsMultiplayerEndOpen(true);
