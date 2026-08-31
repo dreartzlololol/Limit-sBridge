@@ -14,6 +14,11 @@ import { GarageModal } from './components/GarageModal';
 import { FullScreenExplosion } from './components/FullScreenExplosion';
 import { RetryModal } from './components/RetryModal';
 import { GravityExplosionWrapper } from './components/GravityExplosionWrapper';
+import { MultiplayerLobbyModal } from './components/MultiplayerLobbyModal';
+import { MultiplayerHUD } from './components/MultiplayerHUD';
+import { MultiplayerEndModal } from './components/MultiplayerEndModal';
+import { multiplayerService } from './utils/multiplayerService';
+import type { PlayerState, RoomSettings, PowerUpType, MultiplayerMode } from './types/multiplayer';
 import {
   Play,
   RotateCcw,
@@ -49,6 +54,56 @@ export const App: React.FC = () => {
   const [isRetryModalOpen, setIsRetryModalOpen] = useState<boolean>(false);
   const [isGarageOpen, setIsGarageOpen] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
+
+  // Multiplayer State
+  const [isMultiplayer, setIsMultiplayer] = useState<boolean>(false);
+  const [multiplayerMode, setMultiplayerMode] = useState<MultiplayerMode | null>(null);
+  const [isMultiplayerLobbyOpen, setIsMultiplayerLobbyOpen] = useState<boolean>(false);
+  const [isMultiplayerEndOpen, setIsMultiplayerEndOpen] = useState<boolean>(false);
+  const [roomCode, setRoomCode] = useState<string>('');
+  const [isHost, setIsHost] = useState<boolean>(false);
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
+
+  const [currentRound, setCurrentRound] = useState<number>(1);
+  const [totalRounds, setTotalRounds] = useState<number>(5);
+  const [roundTimeLeft, setRoundTimeLeft] = useState<number>(30);
+  const [timeLimitPerRound, setTimeLimitPerRound] = useState<number>(30);
+
+  const [player1, setPlayer1] = useState<PlayerState>({
+    id: multiplayerService.getPlayerId(),
+    name: 'Player 1',
+    vehicle: 'car',
+    score: 0,
+    streak: 0,
+    roundIndex: 1,
+    currentChoice: null,
+    hasAnswered: false,
+    isCorrect: null,
+    driveResult: 'none',
+    energy: 50,
+    activeEffects: [],
+    isReady: true,
+    isHost: true,
+  });
+
+  const [player2, setPlayer2] = useState<PlayerState>({
+    id: 'opponent',
+    name: 'Opponent',
+    vehicle: 'hoverboard',
+    score: 0,
+    streak: 0,
+    roundIndex: 1,
+    currentChoice: null,
+    hasAnswered: false,
+    isCorrect: null,
+    driveResult: 'none',
+    energy: 50,
+    activeEffects: [],
+    isReady: true,
+    isHost: false,
+  });
+
+  const [matchLevelIds, setMatchLevelIds] = useState<number[]>([]);
 
   // Garage State
   const [unlockedVehicles, setUnlockedVehicles] = useState<VehicleType[]>(() => {
@@ -140,6 +195,159 @@ export const App: React.FC = () => {
     setIsRetryModalOpen(false);
   };
 
+  // --- MULTIPLAYER HANDLERS ---
+
+  const handleCreateRoom = async (settings: RoomSettings, name: string, vehicle: VehicleType) => {
+    setIsConnecting(true);
+    const code = multiplayerService.generateRoomCode();
+    setRoomCode(code);
+    setIsHost(true);
+    setMultiplayerMode('online_host');
+    setTotalRounds(settings.totalRounds);
+    setTimeLimitPerRound(settings.timeLimitSec);
+    setRoundTimeLeft(settings.timeLimitSec);
+
+    setPlayer1((prev) => ({
+      ...prev,
+      name,
+      vehicle,
+      score: 0,
+      streak: 0,
+      energy: 50,
+      isHost: true,
+    }));
+
+    await multiplayerService.createRoom(code);
+    setIsConnecting(false);
+  };
+
+  const handleJoinRoom = async (code: string, name: string, vehicle: VehicleType) => {
+    setIsConnecting(true);
+    setRoomCode(code);
+    setIsHost(false);
+    setMultiplayerMode('online_join');
+
+    const localP: PlayerState = {
+      id: multiplayerService.getPlayerId(),
+      name,
+      vehicle,
+      score: 0,
+      streak: 0,
+      roundIndex: 1,
+      currentChoice: null,
+      hasAnswered: false,
+      isCorrect: null,
+      driveResult: 'none',
+      energy: 50,
+      activeEffects: [],
+      isReady: true,
+      isHost: false,
+    };
+
+    setPlayer1(localP);
+    await multiplayerService.joinRoom(code);
+    multiplayerService.sendPacket('JOIN_REQUEST', { player: localP });
+    setIsConnecting(false);
+  };
+
+  const handleStartLocalGame = (name: string, vehicle: VehicleType, rounds: number) => {
+    setMultiplayerMode('local');
+    setIsMultiplayer(true);
+    setTotalRounds(rounds);
+    setCurrentRound(1);
+    setRoundTimeLeft(30);
+    setTimeLimitPerRound(30);
+
+    setPlayer1((prev) => ({
+      ...prev,
+      name,
+      vehicle,
+      score: 0,
+      streak: 0,
+      energy: 50,
+    }));
+
+    setPlayer2({
+      id: 'local_p2',
+      name: 'P2 Rival',
+      vehicle: vehicle === 'car' ? 'hoverboard' : 'car',
+      score: 0,
+      streak: 0,
+      roundIndex: 1,
+      currentChoice: null,
+      hasAnswered: false,
+      isCorrect: null,
+      driveResult: 'none',
+      energy: 50,
+      activeEffects: [],
+      isReady: true,
+      isHost: false,
+    });
+
+    const pickedLevels: number[] = [];
+    for (let i = 0; i < rounds; i++) {
+      pickedLevels.push(Math.floor(Math.random() * LEVELS.length) + 1);
+    }
+    setMatchLevelIds(pickedLevels);
+    setCurrentLevelId(pickedLevels[0]);
+
+    setIsMultiplayerLobbyOpen(false);
+    setViewMode('game');
+    soundManager.playBGM();
+  };
+
+  const handleStartOnlineMatch = () => {
+    const pickedLevels: number[] = [];
+    for (let i = 0; i < totalRounds; i++) {
+      pickedLevels.push(Math.floor(Math.random() * LEVELS.length) + 1);
+    }
+    setMatchLevelIds(pickedLevels);
+    setCurrentRound(1);
+    setCurrentLevelId(pickedLevels[0]);
+    setIsMultiplayer(true);
+    setRoundTimeLeft(timeLimitPerRound);
+
+    multiplayerService.sendPacket('GAME_START', { levels: pickedLevels });
+    setIsMultiplayerLobbyOpen(false);
+    setViewMode('game');
+    soundManager.playBGM();
+  };
+
+  const handleCastPowerUp = (type: PowerUpType) => {
+    const cost = type === 'fog' ? 30 : type === 'glitch' ? 40 : type === 'timeRush' ? 50 : 35;
+    if (player1.energy < cost) return;
+
+    setPlayer1((prev) => ({
+      ...prev,
+      energy: prev.energy - cost,
+    }));
+
+    multiplayerService.sendPacket('POWER_UP_CAST', {
+      attackerId: player1.id,
+      targetId: player2.id,
+      powerUp: type,
+    });
+  };
+
+  const handleNextMultiplayerRound = () => {
+    const nextR = currentRound + 1;
+    if (nextR <= totalRounds && matchLevelIds[nextR - 1]) {
+      setCurrentRound(nextR);
+      setCurrentLevelId(matchLevelIds[nextR - 1]);
+      setRoundTimeLeft(timeLimitPerRound);
+      setSelectedChoice(null);
+      setIsDriving(false);
+      setDriveResult('none');
+      setPlayer1((prev) => ({ ...prev, hasAnswered: false, currentChoice: null, isCorrect: null }));
+      setPlayer2((prev) => ({ ...prev, hasAnswered: false, currentChoice: null, isCorrect: null }));
+      if (isHost && multiplayerMode !== 'local') {
+        multiplayerService.sendPacket('NEXT_ROUND', { roundIndex: nextR });
+      }
+    } else {
+      setIsMultiplayerEndOpen(true);
+    }
+  };
+
   // Trigger vehicle test drive
   const handleStartDrive = () => {
     if (selectedChoice === null || isDriving) return;
@@ -159,6 +367,13 @@ export const App: React.FC = () => {
         spread: 90,
         origin: { y: 0.5 },
       });
+
+      if (isMultiplayer) {
+        setTimeout(() => {
+          handleNextMultiplayerRound();
+        }, 1800);
+        return;
+      }
 
       // Calculate Stars
       const starsEarned = showHint ? 2 : 3;
@@ -194,6 +409,14 @@ export const App: React.FC = () => {
       setIsExploding(true);
       soundManager.playExplosion();
 
+      if (isMultiplayer) {
+        setTimeout(() => {
+          setIsExploding(false);
+          handleNextMultiplayerRound();
+        }, 1800);
+        return;
+      }
+
       // Wait 1.5 seconds before popping up Retry Screen Modal
       setTimeout(() => {
         setIsExploding(false);
@@ -207,6 +430,45 @@ export const App: React.FC = () => {
     soundManager.playClick();
     setSelectedChoice(val);
     setDriveResult('none');
+
+    if (isMultiplayer) {
+      const isCorrect = val === level.correctChoiceValue;
+      const points = isCorrect ? (100 + roundTimeLeft * 2 + player1.streak * 20) : 0;
+
+      setPlayer1((prev) => ({
+        ...prev,
+        hasAnswered: true,
+        currentChoice: val,
+        isCorrect,
+        score: prev.score + points,
+        streak: isCorrect ? prev.streak + 1 : 0,
+        energy: Math.min(100, prev.energy + (isCorrect ? 30 : 0)),
+      }));
+
+      multiplayerService.sendPacket('CHOICE_SUBMITTED', {
+        playerId: player1.id,
+        choice: val,
+        isCorrect,
+        timeSpentSec: timeLimitPerRound - roundTimeLeft,
+      });
+
+      // Sim local opponent choice in local 1v1 mode
+      if (multiplayerMode === 'local') {
+        const p2Correct = Math.random() > 0.3; // 70% chance rival answers correctly
+        const p2Points = p2Correct ? (100 + Math.floor(Math.random() * 20)) : 0;
+        setPlayer2((prev) => ({
+          ...prev,
+          hasAnswered: true,
+          currentChoice: p2Correct ? level.correctChoiceValue : 'wrong',
+          isCorrect: p2Correct,
+          score: prev.score + p2Points,
+          streak: p2Correct ? prev.streak + 1 : 0,
+        }));
+      }
+
+      // Auto start drive test drive in multiplayer!
+      setIsDriving(true);
+    }
   };
 
   // Next level handler
@@ -228,6 +490,7 @@ export const App: React.FC = () => {
           onToggleMute={handleToggleMute}
           onStartGame={() => {
             soundManager.playBGM();
+            setIsMultiplayer(false);
             setViewMode('game');
             const randomLevelId = Math.floor(Math.random() * LEVELS.length) + 1;
             setCurrentLevelId(randomLevelId);
@@ -240,6 +503,26 @@ export const App: React.FC = () => {
             soundManager.playBGM();
             setIsGarageOpen(true);
           }}
+          onOpenMultiplayer={() => {
+            soundManager.playBGM();
+            setIsMultiplayerLobbyOpen(true);
+          }}
+        />
+
+        {/* Multiplayer Lobby Modal */}
+        <MultiplayerLobbyModal
+          isOpen={isMultiplayerLobbyOpen}
+          onClose={() => setIsMultiplayerLobbyOpen(false)}
+          unlockedVehicles={unlockedVehicles}
+          equippedVehicle={equippedVehicle}
+          onCreateRoom={handleCreateRoom}
+          onJoinRoom={handleJoinRoom}
+          onStartLocalGame={handleStartLocalGame}
+          isConnecting={isConnecting}
+          connectedOpponent={player2.name !== 'Opponent' ? player2 : null}
+          roomCode={roomCode}
+          isHost={isHost}
+          onStartOnlineMatch={handleStartOnlineMatch}
         />
 
         {/* Level Selector Modal */}
@@ -296,19 +579,33 @@ export const App: React.FC = () => {
 
       {/* Top HUD Header wrapped in Gravity Physics */}
       <GravityExplosionWrapper isExploding={isExploding} delay={0}>
-        <GameHUD
-          currentLevelId={currentLevelId}
-          totalLevels={LEVELS.length}
-          totalStars={totalStars}
-          isMuted={isMuted}
-          onToggleMute={handleToggleMute}
-          onOpenLevelSelector={() => setIsLevelSelectorOpen(true)}
-          onOpenExplanation={() => setIsExplanationOpen(true)}
-          onOpenScratchpad={() => setIsScratchpadOpen(true)}
-          onShowHint={() => setShowHint(!showHint)}
-          onReset={handleResetLevel}
-          onGoHome={() => setViewMode('menu')}
-        />
+        {isMultiplayer ? (
+          <MultiplayerHUD
+            player1={player1}
+            player2={player2}
+            currentRound={currentRound}
+            totalRounds={totalRounds}
+            timeLeftSec={roundTimeLeft}
+            onCastPowerUp={handleCastPowerUp}
+            activeFog={player1.activeEffects.some((e) => e.type === 'fog')}
+            activeGlitch={player1.activeEffects.some((e) => e.type === 'glitch')}
+            activeShield={player1.activeEffects.some((e) => e.type === 'shield')}
+          />
+        ) : (
+          <GameHUD
+            currentLevelId={currentLevelId}
+            totalLevels={LEVELS.length}
+            totalStars={totalStars}
+            isMuted={isMuted}
+            onToggleMute={handleToggleMute}
+            onOpenLevelSelector={() => setIsLevelSelectorOpen(true)}
+            onOpenExplanation={() => setIsExplanationOpen(true)}
+            onOpenScratchpad={() => setIsScratchpadOpen(true)}
+            onShowHint={() => setShowHint(!showHint)}
+            onReset={handleResetLevel}
+            onGoHome={() => setViewMode('menu')}
+          />
+        )}
       </GravityExplosionWrapper>
 
       {/* Main Game Interface */}
@@ -322,6 +619,8 @@ export const App: React.FC = () => {
               isDriving={isDriving}
               equippedVehicle={equippedVehicle}
               onDriveComplete={handleDriveComplete}
+              isFogged={player1.activeEffects.some((e) => e.type === 'fog')}
+              isGlitched={player1.activeEffects.some((e) => e.type === 'glitch')}
             />
           </GravityExplosionWrapper>
 
@@ -645,6 +944,27 @@ export const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Multiplayer End Podium Modal */}
+      <MultiplayerEndModal
+        isOpen={isMultiplayerEndOpen}
+        player1={player1}
+        player2={player2}
+        totalRounds={totalRounds}
+        onRematch={() => {
+          setIsMultiplayerEndOpen(false);
+          if (multiplayerMode === 'local') {
+            handleStartLocalGame(player1.name, player1.vehicle, totalRounds);
+          } else {
+            handleStartOnlineMatch();
+          }
+        }}
+        onExit={() => {
+          setIsMultiplayerEndOpen(false);
+          setIsMultiplayer(false);
+          setViewMode('menu');
+        }}
+      />
     </div>
   );
 };

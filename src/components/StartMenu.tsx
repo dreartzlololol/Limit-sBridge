@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Grid, Trophy, Star, Volume2, VolumeX, Zap, Award } from 'lucide-react';
+import { Play, Grid, Trophy, Star, Volume2, VolumeX, Zap, Award, Swords } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 
 interface StartMenuProps {
@@ -11,6 +11,7 @@ interface StartMenuProps {
   onStartGame: () => void;
   onOpenLevelSelect: () => void;
   onOpenGarage: () => void;
+  onOpenMultiplayer: () => void;
 }
 
 export const StartMenu: React.FC<StartMenuProps> = ({
@@ -18,9 +19,11 @@ export const StartMenu: React.FC<StartMenuProps> = ({
   completedCount,
   totalLevels,
   isMuted,
+  onToggleMute,
   onStartGame,
   onOpenLevelSelect,
   onOpenGarage,
+  onOpenMultiplayer,
 }) => {
   return (
     <div className="relative min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col justify-between overflow-hidden crt-overlay selection:bg-cyan-500 selection:text-white">
@@ -92,7 +95,7 @@ export const StartMenu: React.FC<StartMenuProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-lg mx-auto pt-2">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-xl mx-auto pt-2">
           <button
             onClick={() => {
               soundManager.playSuccess();
@@ -102,6 +105,17 @@ export const StartMenu: React.FC<StartMenuProps> = ({
           >
             <Play className="w-5 h-5 fill-white transition-transform group-hover:scale-110" />
             <span>PRESS START</span>
+          </button>
+
+          <button
+            onClick={() => {
+              soundManager.playSuccess();
+              onOpenMultiplayer();
+            }}
+            className="btn-uiverse w-full sm:w-auto font-pixel text-xs shadow-[0_0_25px_rgba(236,72,153,0.5)] border-pink-500/60 bg-gradient-to-r from-purple-900/60 to-pink-900/60 hover:from-purple-800 hover:to-pink-800"
+          >
+            <Swords className="w-4 h-4 text-pink-400 animate-pulse" />
+            <span>VS MULTIPLAYER</span>
           </button>
 
           <button

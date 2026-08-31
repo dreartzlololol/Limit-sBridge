@@ -8,6 +8,8 @@ interface GraphCanvasProps {
   isDriving: boolean;
   equippedVehicle: import('../types/game').VehicleType;
   onDriveComplete: (success: boolean) => void;
+  isFogged?: boolean;
+  isGlitched?: boolean;
 }
 
 interface Particle {
@@ -52,6 +54,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   isDriving,
   equippedVehicle,
   onDriveComplete,
+  isFogged,
+  isGlitched,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -968,9 +972,20 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className="relative transition-all duration-300 w-full h-[380px] md:h-[460px] bg-slate-950 rounded-2xl overflow-hidden border-2 border-cyan-500/60 shadow-[0_0_30px_rgba(0,240,255,0.25)] crt-overlay"
+      className={`relative transition-all duration-300 w-full h-[380px] md:h-[460px] bg-slate-950 rounded-2xl overflow-hidden border-2 border-cyan-500/60 shadow-[0_0_30px_rgba(0,240,255,0.25)] crt-overlay ${
+        isGlitched ? 'animate-bounce skew-x-2 blur-[1px]' : ''
+      }`}
     >
-      <canvas ref={canvasRef} className="w-full h-full block cursor-crosshair" />
+      <canvas ref={canvasRef} className={`w-full h-full block cursor-crosshair ${isFogged ? 'blur-md opacity-40 transition-all duration-500' : ''}`} />
+
+      {/* Fog Attack Overlay */}
+      {isFogged && (
+        <div className="absolute inset-0 bg-purple-950/80 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center pointer-events-none animate-pulse">
+          <div className="text-4xl mb-2">💨</div>
+          <div className="text-lg font-pixel font-bold text-purple-300">FOG SPRAY ATTACKED!</div>
+          <div className="text-xs text-purple-200 font-mono mt-1">Graph vision is obscured for 6 seconds!</div>
+        </div>
+      )}
 
       {/* Legend Overlay */}
       <div className="absolute top-4 left-4 bg-slate-950/90 backdrop-blur-md px-4 py-2 rounded-xl border border-cyan-500/40 text-xs flex items-center space-x-4 text-cyan-200 shadow-[0_0_15px_rgba(0,240,255,0.2)] font-arcade text-sm tracking-wide">
