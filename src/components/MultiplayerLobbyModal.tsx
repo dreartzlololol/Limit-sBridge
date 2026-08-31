@@ -10,6 +10,8 @@ import {
   Sparkles,
   Car,
   Award,
+  Loader2,
+  LogOut,
 } from 'lucide-react';
 import type { VehicleType } from '../types/game';
 import type { RoomSettings, PlayerState } from '../types/multiplayer';
@@ -28,6 +30,7 @@ interface MultiplayerLobbyModalProps {
   roomCode: string;
   isHost: boolean;
   onStartOnlineMatch: () => void;
+  onLeaveRoom: () => void;
 }
 
 export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
@@ -43,6 +46,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
   roomCode,
   isHost,
   onStartOnlineMatch,
+  onLeaveRoom,
 }) => {
   const [tab, setTab] = useState<'create' | 'join' | 'local'>('create');
   const [playerName, setPlayerName] = useState<string>('Racer ' + Math.floor(Math.random() * 100));
@@ -68,7 +72,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
   const handleCreate = () => {
     soundManager.playClick();
     const settings: RoomSettings = {
-      roomCode: '', // will be auto-generated in service
+      roomCode: '',
       totalRounds,
       difficulty,
       timeLimitSec,
@@ -88,7 +92,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
       <div className="relative w-full max-w-2xl bg-slate-900 border-2 border-cyan-500/40 rounded-2xl shadow-[0_0_50px_rgba(0,240,255,0.25)] text-slate-100 overflow-hidden">
         
         {/* Header Bar */}
@@ -110,6 +114,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
           <button
             onClick={() => {
               soundManager.playClick();
+              if (roomCode) onLeaveRoom();
               onClose();
             }}
             className="p-2 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-rose-500/20 rounded-xl transition-all"
@@ -121,7 +126,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
         {/* Content Area */}
         <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
           
-          {/* Mode Selector Tabs */}
+          {/* Mode Selector Tabs (Only when not inside an active room) */}
           {!roomCode && (
             <div className="grid grid-cols-3 gap-2 p-1.5 bg-slate-950 rounded-xl border border-slate-800">
               <button
@@ -171,71 +176,49 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
             </div>
           )}
 
-          {/* Active Room Code Banner (When Room is Created / Active) */}
-          {roomCode && (
-            <div className="p-4 bg-gradient-to-r from-cyan-950/60 to-purple-950/60 border-2 border-cyan-400/50 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
-              <div>
-                <div className="text-[10px] text-cyan-400 font-mono uppercase tracking-wider">
-                  ROOM CODE
-                </div>
-                <div className="text-3xl font-extrabold font-pixel text-yellow-300 tracking-widest">
-                  {roomCode}
-                </div>
+          {/* Player Customization (Only before room created/joined) */}
+          {!roomCode && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-mono text-cyan-400 uppercase tracking-wider">
+                  PLAYER NAME
+                </label>
+                <input
+                  type="text"
+                  value={playerName}
+                  onChange={(e) => setPlayerName(e.target.value)}
+                  maxLength={16}
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm font-semibold text-slate-100 focus:outline-none focus:border-cyan-400 transition-colors"
+                  placeholder="Enter nickname..."
+                />
               </div>
 
-              <div className="flex items-center space-x-3 w-full sm:w-auto">
-                <button
-                  onClick={handleCopyCode}
-                  className="flex-1 sm:flex-none px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 transition-all active:scale-95"
-                >
-                  {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
-                  <span>{copied ? 'COPIED!' : 'COPY CODE'}</span>
-                </button>
+              <div className="space-y-2">
+                <label className="text-xs font-mono text-cyan-400 uppercase tracking-wider">
+                  CHOOSE VEHICLE
+                </label>
+                <div className="flex items-center space-x-2">
+                  {unlockedVehicles.map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => {
+                        soundManager.playClick();
+                        setSelectedVehicle(v);
+                      }}
+                      className={`p-2.5 rounded-xl border transition-all flex items-center justify-center flex-1 capitalize text-xs font-bold ${
+                        selectedVehicle === v
+                          ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300 shadow-[0_0_10px_rgba(0,240,255,0.3)]'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <Car className="w-4 h-4 mr-1.5" />
+                      {v}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
-
-          {/* Player Customization (Name & Vehicle) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-xs font-mono text-cyan-400 uppercase tracking-wider">
-                PLAYER NAME
-              </label>
-              <input
-                type="text"
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                maxLength={16}
-                className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm font-semibold text-slate-100 focus:outline-none focus:border-cyan-400 transition-colors"
-                placeholder="Enter nickname..."
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-mono text-cyan-400 uppercase tracking-wider">
-                CHOOSE VEHICLE
-              </label>
-              <div className="flex items-center space-x-2">
-                {unlockedVehicles.map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => {
-                      soundManager.playClick();
-                      setSelectedVehicle(v);
-                    }}
-                    className={`p-2.5 rounded-xl border transition-all flex items-center justify-center flex-1 capitalize text-xs font-bold ${
-                      selectedVehicle === v
-                        ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300 shadow-[0_0_10px_rgba(0,240,255,0.3)]'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <Car className="w-4 h-4 mr-1.5" />
-                    {v}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
 
           {/* TAB 1: CREATE ROOM OPTIONS */}
           {!roomCode && tab === 'create' && (
@@ -292,8 +275,8 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
                 disabled={isConnecting}
                 className="w-full py-3.5 bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 hover:from-cyan-400 hover:to-purple-500 font-pixel text-xs rounded-xl shadow-[0_0_25px_rgba(0,240,255,0.4)] transition-all active:scale-95 flex items-center justify-center space-x-2"
               >
-                <Sparkles className="w-4 h-4" />
-                <span>CREATE ROOM & GET CODE</span>
+                {isConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                <span>{isConnecting ? 'INITIALIZING HOST...' : 'CREATE ROOM & GET CODE'}</span>
               </button>
             </div>
           )}
@@ -310,7 +293,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
                   value={joinCodeInput}
                   onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
                   maxLength={6}
-                  placeholder="e.g. 4892"
+                  placeholder="e.g. 2993"
                   className="w-full text-center tracking-widest text-2xl font-pixel uppercase py-3 bg-slate-950 border-2 border-purple-500/50 rounded-xl focus:border-purple-400 focus:outline-none transition-colors"
                 />
               </div>
@@ -320,8 +303,8 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
                 disabled={!joinCodeInput.trim() || isConnecting}
                 className="w-full py-3.5 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-400 hover:to-pink-500 disabled:opacity-50 font-pixel text-xs rounded-xl shadow-[0_0_25px_rgba(236,72,153,0.4)] transition-all active:scale-95 flex items-center justify-center space-x-2"
               >
-                <Users className="w-4 h-4" />
-                <span>CONNECT TO ROOM</span>
+                {isConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+                <span>{isConnecting ? 'CONNECTING TO ROOM...' : 'CONNECT TO ROOM'}</span>
               </button>
             </div>
           )}
@@ -356,57 +339,171 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
             </div>
           )}
 
-          {/* ROOM STATUS & OPPONENT CONNECTED STATUS */}
-          {roomCode && (
-            <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
-              <div className="text-xs font-mono text-slate-400 font-semibold uppercase flex items-center justify-between">
-                <span>OPPONENT STATUS</span>
-                <span className="flex items-center space-x-1.5 text-emerald-400 text-[10px]">
-                  <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
-                  <span>ONLINE</span>
-                </span>
+          {/* HOST LOBBY VIEW */}
+          {roomCode && isHost && (
+            <div className="space-y-4">
+              <div className="p-4 bg-gradient-to-r from-cyan-950/60 to-purple-950/60 border-2 border-cyan-400/50 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+                <div>
+                  <div className="text-[10px] text-cyan-400 font-mono uppercase tracking-wider">
+                    HOST ROOM CODE
+                  </div>
+                  <div className="text-3xl font-extrabold font-pixel text-yellow-300 tracking-widest">
+                    {roomCode}
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3 w-full sm:w-auto">
+                  <button
+                    onClick={handleCopyCode}
+                    className="flex-1 sm:flex-none px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 transition-all active:scale-95"
+                  >
+                    {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
+                    <span>{copied ? 'COPIED!' : 'COPY CODE'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      soundManager.playClick();
+                      onLeaveRoom();
+                    }}
+                    className="p-2 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 rounded-xl transition-all"
+                    title="Cancel Room"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
-              {connectedOpponent ? (
-                <div className="p-3 bg-emerald-950/30 border border-emerald-500/40 rounded-xl flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-emerald-500/20 rounded-lg text-emerald-400 font-bold text-xs uppercase">
-                      P2
-                    </div>
-                    <div>
-                      <div className="text-sm font-bold text-slate-100">{connectedOpponent.name}</div>
-                      <div className="text-[10px] text-slate-400 capitalize">Vehicle: {connectedOpponent.vehicle}</div>
-                    </div>
-                  </div>
-                  <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-400/40 text-[10px] font-bold rounded-md">
-                    READY
+              <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+                <div className="text-xs font-mono text-slate-400 font-semibold uppercase flex items-center justify-between">
+                  <span>GUEST OPPONENT STATUS</span>
+                  <span className="flex items-center space-x-1.5 text-emerald-400 text-[10px]">
+                    <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
+                    <span>HOSTING ONLINE</span>
                   </span>
                 </div>
-              ) : (
-                <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl text-center space-y-2">
-                  <div className="inline-block p-2 bg-purple-500/20 rounded-full animate-spin">
-                    <Zap className="w-5 h-5 text-purple-400" />
-                  </div>
-                  <p className="text-xs text-slate-400 font-mono">
-                    Waiting for opponent to join using code <strong className="text-yellow-300 font-pixel">{roomCode}</strong>...
-                  </p>
-                </div>
-              )}
 
-              {/* HOST START MATCH BUTTON */}
-              {isHost && (
+                {connectedOpponent ? (
+                  <div className="p-3.5 bg-emerald-950/40 border border-emerald-500/50 rounded-xl flex items-center justify-between shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-emerald-500/20 rounded-lg text-emerald-400 font-bold text-xs uppercase font-pixel">
+                        P2 GUEST
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-slate-100">{connectedOpponent.name}</div>
+                        <div className="text-[10px] text-emerald-300 capitalize">Vehicle: {connectedOpponent.vehicle}</div>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-400/50 text-[10px] font-bold rounded-md animate-pulse">
+                      CONNECTED & READY!
+                    </span>
+                  </div>
+                ) : (
+                  <div className="p-5 bg-slate-900 border border-slate-800 rounded-xl text-center space-y-2">
+                    <div className="inline-block p-2 bg-purple-500/20 rounded-full animate-spin">
+                      <Loader2 className="w-6 h-6 text-purple-400" />
+                    </div>
+                    <p className="text-xs text-slate-300 font-mono">
+                      Share code <strong className="text-yellow-300 font-pixel text-sm">{roomCode}</strong> with your rival!
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      Waiting for Guest player to enter code...
+                    </p>
+                  </div>
+                )}
+
                 <button
                   onClick={() => {
                     soundManager.playSuccess();
                     onStartOnlineMatch();
                   }}
                   disabled={!connectedOpponent}
-                  className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 disabled:opacity-40 font-pixel text-xs rounded-xl shadow-[0_0_30px_rgba(16,185,129,0.4)] transition-all active:scale-95 flex items-center justify-center space-x-2"
+                  className="w-full py-4 bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-600 hover:from-emerald-400 hover:to-blue-500 disabled:opacity-40 font-pixel text-xs rounded-xl shadow-[0_0_30px_rgba(16,185,129,0.4)] transition-all active:scale-95 flex items-center justify-center space-x-2"
                 >
-                  <Play className="w-4 h-4 fill-white" />
+                  <Play className="w-5 h-5 fill-white" />
                   <span>START MULTIPLAYER MATCH!</span>
                 </button>
-              )}
+              </div>
+            </div>
+          )}
+
+          {/* GUEST LOBBY VIEW */}
+          {roomCode && !isHost && (
+            <div className="space-y-4">
+              <div className="p-4 bg-gradient-to-r from-purple-950/60 to-pink-950/60 border-2 border-purple-400/50 rounded-2xl flex items-center justify-between shadow-xl">
+                <div>
+                  <div className="text-[10px] text-purple-300 font-mono uppercase tracking-wider">
+                    JOINED ROOM CODE
+                  </div>
+                  <div className="text-3xl font-extrabold font-pixel text-pink-300 tracking-widest">
+                    {roomCode}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    soundManager.playClick();
+                    onLeaveRoom();
+                  }}
+                  className="px-3.5 py-2 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>LEAVE</span>
+                </button>
+              </div>
+
+              <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+                <div className="text-xs font-mono text-slate-400 font-semibold uppercase flex items-center justify-between">
+                  <span>ROOM HOST STATUS</span>
+                  <span className="flex items-center space-x-1.5 text-cyan-400 text-[10px]">
+                    <span className="w-2 h-2 bg-cyan-400 rounded-full animate-ping" />
+                    <span>CONNECTED TO HOST</span>
+                  </span>
+                </div>
+
+                {connectedOpponent ? (
+                  <div className="p-4 bg-purple-950/40 border border-purple-500/50 rounded-xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-cyan-500/20 rounded-lg text-cyan-400 font-bold text-xs uppercase font-pixel">
+                          P1 HOST
+                        </div>
+                        <div>
+                          <div className="text-sm font-bold text-slate-100">{connectedOpponent.name}</div>
+                          <div className="text-[10px] text-purple-300 capitalize">Vehicle: {connectedOpponent.vehicle}</div>
+                        </div>
+                      </div>
+                      <span className="px-3 py-1 bg-cyan-500/20 text-cyan-300 border border-cyan-400/50 text-[10px] font-bold rounded-md">
+                        HOST READY
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-slate-900/80 rounded-lg border border-purple-500/30 text-center space-y-1">
+                      <div className="inline-block p-1.5 bg-cyan-500/20 rounded-full animate-bounce">
+                        <Sparkles className="w-4 h-4 text-cyan-400" />
+                      </div>
+                      <p className="text-xs text-cyan-300 font-mono font-bold">
+                        CONNECTED TO HOST!
+                      </p>
+                      <p className="text-[11px] text-slate-400 font-mono">
+                        Waiting for Host (<strong className="text-slate-200">{connectedOpponent.name}</strong>) to press Start Match...
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-5 bg-slate-900 border border-slate-800 rounded-xl text-center space-y-2">
+                    <div className="inline-block p-2 bg-pink-500/20 rounded-full animate-spin">
+                      <Loader2 className="w-6 h-6 text-pink-400" />
+                    </div>
+                    <p className="text-xs text-slate-200 font-mono">
+                      Connecting to Host room <strong className="text-yellow-300 font-pixel">{roomCode}</strong>...
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      Establishing real-time connection...
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

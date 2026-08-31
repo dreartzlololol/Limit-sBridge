@@ -18,7 +18,7 @@ import { MultiplayerLobbyModal } from './components/MultiplayerLobbyModal';
 import { MultiplayerHUD } from './components/MultiplayerHUD';
 import { MultiplayerEndModal } from './components/MultiplayerEndModal';
 import { multiplayerService } from './utils/multiplayerService';
-import type { PlayerState, RoomSettings, PowerUpType, MultiplayerMode } from './types/multiplayer';
+import type { PlayerState, RoomSettings, PowerUpType, MultiplayerMode, NetworkPacket } from './types/multiplayer';
 import {
   Play,
   RotateCcw,
@@ -195,6 +195,129 @@ export const App: React.FC = () => {
     setIsRetryModalOpen(false);
   };
 
+  // --- MULTIPLAYER NETWORK PACKET LISTENER ---
+  useEffect(() => {
+    const unsubscribe = multiplayerService.subscribe((packet: NetworkPacket) => {
+      console.log('[Multiplayer Packet Received]:', packet.type, packet);
+
+      switch (packet.type) {
+        case 'JOIN_REQUEST': {
+          const guestPlayer = packet.payload.player as PlayerState;
+          if (guestPlayer && guestPlayer.id !== player1.id) {
+            setPlayer2(guestPlayer);
+            soundManager.playSuccess();
+            // Host responds immediately with JOIN_ACCEPT
+            multiplayerService.sendPacket('JOIN_ACCEPT', {
+              host: player1,
+              guest: guestPlayer,
+              settings: { totalRounds, timeLimitSec: timeLimitPerRound },
+            });
+          }
+          break;
+        }
+
+        case 'JOIN_ACCEPT': {
+          const hostPlayer = packet.payload.host as PlayerState;
+          if (hostPlayer) {
+            setPlayer2(hostPlayer);
+            soundManager.playSuccess();
+            if (packet.payload.settings) {
+              setTotalRounds(packet.payload.settings.totalRounds);
+              setTimeLimitPerRound(packet.payload.settings.timeLimitSec);
+              setRoundTimeLeft(packet.payload.settings.timeLimitSec);
+            }
+            // Guest stops JOIN_REQUEST retry heartbeat
+            multiplayerService.stopHeartbeat();
+          }
+          break;
+        }
+
+        case 'GAME_START': {
+          const levels = packet.payload.levels as number[];
+          if (levels && levels.length > 0) {
+            setMatchLevelIds(levels);
+            setCurrentRound(1);
+            setCurrentLevelId(levels[0]);
+            setIsMultiplayer(true);
+            setIsMultiplayerLobbyOpen(false);
+            setViewMode('game');
+            soundManager.playBGM();
+            multiplayerService.stopHeartbeat();
+          }
+          break;
+        }
+
+        case 'CHOICE_SUBMITTED': {
+          const { playerId, choice, isCorrect } = packet.payload;
+          if (playerId !== player1.id) {
+            setPlayer2((prev) => ({
+              ...prev,
+              hasAnswered: true,
+              currentChoice: choice,
+              isCorrect,
+              score: prev.score + (isCorrect ? 100 : 0),
+              streak: isCorrect ? prev.streak + 1 : 0,
+            }));
+          }
+          break;
+        }
+
+        case 'POWER_UP_CAST': {
+          const { powerUp, targetId } = packet.payload;
+          if (targetId === player1.id || packet.senderId !== player1.id) {
+            soundManager.playAttack();
+            const hasShield = player1.activeEffects.some((e) => e.type === 'shield');
+            if (hasShield) {
+              setPlayer1((prev) => ({
+                ...prev,
+                activeEffects: prev.activeEffects.filter((e) => e.type !== 'shield'),
+              }));
+            } else {
+              const durationMs = powerUp === 'fog' ? 6000 : 5000;
+              const expiresAt = Date.now() + durationMs;
+              setPlayer1((prev) => ({
+                ...prev,
+                activeEffects: [...prev.activeEffects, { type: powerUp, expiresAt }],
+              }));
+              setTimeout(() => {
+                setPlayer1((prev) => ({
+                  ...prev,
+                  activeEffects: prev.activeEffects.filter((e) => e.expiresAt > Date.now()),
+                }));
+              }, durationMs);
+            }
+          }
+          break;
+        }
+
+        case 'NEXT_ROUND': {
+          const nextR = packet.payload.roundIndex;
+          if (nextR <= totalRounds && matchLevelIds[nextR - 1]) {
+            setCurrentRound(nextR);
+            setCurrentLevelId(matchLevelIds[nextR - 1]);
+            setRoundTimeLeft(timeLimitPerRound);
+            setSelectedChoice(null);
+            setIsDriving(false);
+            setDriveResult('none');
+            setPlayer1((prev) => ({ ...prev, hasAnswered: false, currentChoice: null, isCorrect: null }));
+            setPlayer2((prev) => ({ ...prev, hasAnswered: false, currentChoice: null, isCorrect: null }));
+          } else {
+            setIsMultiplayerEndOpen(true);
+          }
+          break;
+        }
+
+        case 'LEAVE_ROOM': {
+          soundManager.playError();
+          setIsMultiplayerEndOpen(true);
+          break;
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [player1.id, totalRounds, matchLevelIds, timeLimitPerRound]);
+
   // --- MULTIPLAYER HANDLERS ---
 
   const handleCreateRoom = async (settings: RoomSettings, name: string, vehicle: VehicleType) => {
@@ -207,15 +330,40 @@ export const App: React.FC = () => {
     setTimeLimitPerRound(settings.timeLimitSec);
     setRoundTimeLeft(settings.timeLimitSec);
 
-    setPlayer1((prev) => ({
-      ...prev,
+    const hostP: PlayerState = {
+      id: multiplayerService.getPlayerId(),
       name,
       vehicle,
       score: 0,
       streak: 0,
+      roundIndex: 1,
+      currentChoice: null,
+      hasAnswered: false,
+      isCorrect: null,
+      driveResult: 'none',
       energy: 50,
+      activeEffects: [],
+      isReady: true,
       isHost: true,
-    }));
+    };
+
+    setPlayer1(hostP);
+    setPlayer2({
+      id: 'waiting',
+      name: 'Waiting...',
+      vehicle: 'hoverboard',
+      score: 0,
+      streak: 0,
+      roundIndex: 1,
+      currentChoice: null,
+      hasAnswered: false,
+      isCorrect: null,
+      driveResult: 'none',
+      energy: 50,
+      activeEffects: [],
+      isReady: false,
+      isHost: false,
+    });
 
     await multiplayerService.createRoom(code);
     setIsConnecting(false);
@@ -227,7 +375,7 @@ export const App: React.FC = () => {
     setIsHost(false);
     setMultiplayerMode('online_join');
 
-    const localP: PlayerState = {
+    const guestP: PlayerState = {
       id: multiplayerService.getPlayerId(),
       name,
       vehicle,
@@ -244,10 +392,42 @@ export const App: React.FC = () => {
       isHost: false,
     };
 
-    setPlayer1(localP);
+    setPlayer1(guestP);
+    setPlayer2({
+      id: 'connecting_host',
+      name: 'Host',
+      vehicle: 'car',
+      score: 0,
+      streak: 0,
+      roundIndex: 1,
+      currentChoice: null,
+      hasAnswered: false,
+      isCorrect: null,
+      driveResult: 'none',
+      energy: 50,
+      activeEffects: [],
+      isReady: false,
+      isHost: true,
+    });
+
     await multiplayerService.joinRoom(code);
-    multiplayerService.sendPacket('JOIN_REQUEST', { player: localP });
+
+    multiplayerService.startHeartbeat(() => ({
+      type: 'JOIN_REQUEST',
+      senderId: guestP.id,
+      payload: { player: guestP },
+      timestamp: Date.now(),
+    }));
+
     setIsConnecting(false);
+  };
+
+  const handleLeaveRoom = () => {
+    multiplayerService.disconnect();
+    setRoomCode('');
+    setIsHost(false);
+    setMultiplayerMode(null);
+    setIsMultiplayer(false);
   };
 
   const handleStartLocalGame = (name: string, vehicle: VehicleType, rounds: number) => {
@@ -519,10 +699,11 @@ export const App: React.FC = () => {
           onJoinRoom={handleJoinRoom}
           onStartLocalGame={handleStartLocalGame}
           isConnecting={isConnecting}
-          connectedOpponent={player2.name !== 'Opponent' ? player2 : null}
+          connectedOpponent={player2.id !== 'waiting' && player2.id !== 'connecting_host' && player2.name !== 'Opponent' ? player2 : null}
           roomCode={roomCode}
           isHost={isHost}
           onStartOnlineMatch={handleStartOnlineMatch}
+          onLeaveRoom={handleLeaveRoom}
         />
 
         {/* Level Selector Modal */}
