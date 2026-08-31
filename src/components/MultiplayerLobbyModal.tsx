@@ -12,6 +12,7 @@ import {
   Award,
   Loader2,
   LogOut,
+  Clock,
 } from 'lucide-react';
 import type { VehicleType } from '../types/game';
 import type { RoomSettings, PlayerState } from '../types/multiplayer';
@@ -24,7 +25,7 @@ interface MultiplayerLobbyModalProps {
   equippedVehicle: VehicleType;
   onCreateRoom: (settings: RoomSettings, playerName: string, vehicle: VehicleType) => void;
   onJoinRoom: (roomCode: string, playerName: string, vehicle: VehicleType) => void;
-  onStartLocalGame: (playerName: string, vehicle: VehicleType, totalRounds: number) => void;
+  onStartLocalGame: (playerName: string, vehicle: VehicleType, durationSec: number) => void;
   isConnecting: boolean;
   connectedOpponent: PlayerState | null;
   roomCode: string;
@@ -55,8 +56,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
   const [copied, setCopied] = useState<boolean>(false);
 
   // Settings for Create Room
-  const [totalRounds, setTotalRounds] = useState<number>(5);
-  const [timeLimitSec, setTimeLimitSec] = useState<number>(30);
+  const [durationSec, setDurationSec] = useState<number>(60); // 60, 120, 180s continuous match
   const [difficulty, setDifficulty] = useState<RoomSettings['difficulty']>('All');
 
   if (!isOpen) return null;
@@ -73,22 +73,22 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
     soundManager.playClick();
     const settings: RoomSettings = {
       roomCode: '',
-      totalRounds,
+      durationSec,
       difficulty,
-      timeLimitSec,
     };
     onCreateRoom(settings, playerName, selectedVehicle);
   };
 
   const handleJoin = () => {
-    if (!joinCodeInput.trim()) return;
+    const clean = joinCodeInput.trim().toUpperCase();
+    if (!clean) return;
     soundManager.playClick();
-    onJoinRoom(joinCodeInput.trim().toUpperCase(), playerName, selectedVehicle);
+    onJoinRoom(clean, playerName, selectedVehicle);
   };
 
   const handleLocal = () => {
     soundManager.playClick();
-    onStartLocalGame(playerName, selectedVehicle, totalRounds);
+    onStartLocalGame(playerName, selectedVehicle, durationSec);
   };
 
   return (
@@ -103,10 +103,10 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
             </div>
             <div>
               <h2 className="text-xl font-bold font-pixel text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-pink-400 to-yellow-300">
-                LIMIT DUEL • MULTIPLAYER
+                LIMIT DUEL • SPEED RUN RUSH
               </h2>
               <p className="text-xs text-slate-400 font-mono">
-                REAL-TIME CALCULUS RACE & SABOTAGE BATTLE
+                CONTINUOUS SPEED CALCULUS & REAL-TIME SABOTAGE BATTLE
               </p>
             </div>
           </div>
@@ -181,7 +181,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-xs font-mono text-cyan-400 uppercase tracking-wider">
-                  PLAYER NAME
+                  PLAYER NICKNAME
                 </label>
                 <input
                   type="text"
@@ -223,43 +223,31 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
           {/* TAB 1: CREATE ROOM OPTIONS */}
           {!roomCode && tab === 'create' && (
             <div className="space-y-4 p-4 bg-slate-950/60 rounded-2xl border border-slate-800">
-              <div className="text-xs font-mono text-slate-400 font-semibold uppercase">
-                MATCH CONFIGURATION
+              <div className="text-xs font-mono text-slate-400 font-semibold uppercase flex items-center space-x-2">
+                <Clock className="w-4 h-4 text-cyan-400" />
+                <span>CONTINUOUS MATCH CONFIGURATION</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">TOTAL ROUNDS</label>
+                  <label className="text-[11px] text-slate-400 block mb-1">MATCH DURATION (TIME RUSH)</label>
                   <select
-                    value={totalRounds}
-                    onChange={(e) => setTotalRounds(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-bold focus:border-cyan-400"
+                    value={durationSec}
+                    onChange={(e) => setDurationSec(Number(e.target.value))}
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs font-bold focus:border-cyan-400 text-cyan-300"
                   >
-                    <option value={3}>3 Rounds (Quick Duel)</option>
-                    <option value={5}>5 Rounds (Standard)</option>
-                    <option value={10}>10 Rounds (Marathon)</option>
+                    <option value={60}>60 Seconds (1 Min Speed Sprint)</option>
+                    <option value={120}>120 Seconds (2 Min Race)</option>
+                    <option value={180}>180 Seconds (3 Min Endurance)</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">TIMER PER ROUND</label>
-                  <select
-                    value={timeLimitSec}
-                    onChange={(e) => setTimeLimitSec(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-bold focus:border-cyan-400"
-                  >
-                    <option value={15}>15 Seconds (Blitz)</option>
-                    <option value={30}>30 Seconds (Normal)</option>
-                    <option value={60}>60 Seconds (Relaxed)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">DIFFICULTY</label>
+                  <label className="text-[11px] text-slate-400 block mb-1">DIFFICULTY POOL</label>
                   <select
                     value={difficulty}
                     onChange={(e) => setDifficulty(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-bold focus:border-cyan-400"
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs font-bold focus:border-cyan-400"
                   >
                     <option value="All">All Levels Mixed</option>
                     <option value="Basic">Basic Only</option>
@@ -269,6 +257,10 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
                   </select>
                 </div>
               </div>
+
+              <p className="text-[11px] text-slate-400 font-mono leading-relaxed bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                ⚡ <strong>Speed Run Rule:</strong> Solve levels continuously without stopping for the entire match timer! Most levels solved wins!
+              </p>
 
               <button
                 onClick={handleCreate}
@@ -286,15 +278,15 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
             <div className="space-y-4 p-4 bg-slate-950/60 rounded-2xl border border-slate-800">
               <div className="space-y-2">
                 <label className="text-xs font-mono text-purple-400 uppercase tracking-wider">
-                  ENTER ROOM CODE (4 DIGITS)
+                  ENTER HOST ROOM CODE (4 DIGITS)
                 </label>
                 <input
                   type="text"
                   value={joinCodeInput}
                   onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
                   maxLength={6}
-                  placeholder="e.g. 2993"
-                  className="w-full text-center tracking-widest text-2xl font-pixel uppercase py-3 bg-slate-950 border-2 border-purple-500/50 rounded-xl focus:border-purple-400 focus:outline-none transition-colors"
+                  placeholder="e.g. 6496"
+                  className="w-full text-center tracking-widest text-3xl font-pixel uppercase py-3.5 bg-slate-950 border-2 border-purple-500/50 rounded-xl focus:border-purple-400 focus:outline-none transition-colors text-yellow-300 shadow-inner"
                 />
               </div>
 
@@ -304,7 +296,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
                 className="w-full py-3.5 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-400 hover:to-pink-500 disabled:opacity-50 font-pixel text-xs rounded-xl shadow-[0_0_25px_rgba(236,72,153,0.4)] transition-all active:scale-95 flex items-center justify-center space-x-2"
               >
                 {isConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
-                <span>{isConnecting ? 'CONNECTING TO ROOM...' : 'CONNECT TO ROOM'}</span>
+                <span>{isConnecting ? 'CONNECTING TO ROOM...' : `CONNECT TO ROOM ${joinCodeInput.trim()}`}</span>
               </button>
             </div>
           )}
@@ -313,19 +305,19 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
           {!roomCode && tab === 'local' && (
             <div className="space-y-4 p-4 bg-slate-950/60 rounded-2xl border border-slate-800">
               <p className="text-xs text-slate-300 leading-relaxed">
-                Battle locally on the same device! Players take turns or race concurrently to answer calculus limits.
+                Speed run duel on the same device! Race against the clock to solve as many levels as possible.
               </p>
 
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1">TOTAL ROUNDS</label>
+                <label className="text-[11px] text-slate-400 block mb-1">MATCH DURATION</label>
                 <select
-                  value={totalRounds}
-                  onChange={(e) => setTotalRounds(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-bold focus:border-yellow-400"
+                  value={durationSec}
+                  onChange={(e) => setDurationSec(Number(e.target.value))}
+                  className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs font-bold focus:border-yellow-400 text-yellow-300"
                 >
-                  <option value={3}>3 Rounds (Quick Match)</option>
-                  <option value={5}>5 Rounds (Best of 5)</option>
-                  <option value={10}>10 Rounds (Championship)</option>
+                  <option value={60}>60 Seconds (1 Min Sprint)</option>
+                  <option value={120}>120 Seconds (2 Min Race)</option>
+                  <option value={180}>180 Seconds (3 Min Endurance)</option>
                 </select>
               </div>
 
@@ -334,7 +326,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
                 className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-pixel text-xs rounded-xl shadow-[0_0_25px_rgba(234,179,8,0.4)] transition-all active:scale-95 flex items-center justify-center space-x-2"
               >
                 <Play className="w-4 h-4 fill-slate-950" />
-                <span>START LOCAL 1v1 DUEL</span>
+                <span>START LOCAL SPEED RUN DUEL</span>
               </button>
             </div>
           )}
@@ -345,9 +337,9 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
               <div className="p-4 bg-gradient-to-r from-cyan-950/60 to-purple-950/60 border-2 border-cyan-400/50 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
                 <div>
                   <div className="text-[10px] text-cyan-400 font-mono uppercase tracking-wider">
-                    HOST ROOM CODE
+                    HOST ROOM CODE (SHARE WITH RIVAL)
                   </div>
-                  <div className="text-3xl font-extrabold font-pixel text-yellow-300 tracking-widest">
+                  <div className="text-4xl font-extrabold font-pixel text-yellow-300 tracking-widest drop-shadow-[0_0_15px_rgba(253,224,71,0.5)]">
                     {roomCode}
                   </div>
                 </div>
@@ -355,7 +347,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
                 <div className="flex items-center space-x-3 w-full sm:w-auto">
                   <button
                     onClick={handleCopyCode}
-                    className="flex-1 sm:flex-none px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 transition-all active:scale-95"
+                    className="flex-1 sm:flex-none px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 transition-all active:scale-95"
                   >
                     {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
                     <span>{copied ? 'COPIED!' : 'COPY CODE'}</span>
@@ -366,7 +358,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
                       soundManager.playClick();
                       onLeaveRoom();
                     }}
-                    className="p-2 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 rounded-xl transition-all"
+                    className="p-2.5 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 rounded-xl transition-all"
                     title="Cancel Room"
                   >
                     <LogOut className="w-4 h-4" />
@@ -403,11 +395,11 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
                     <div className="inline-block p-2 bg-purple-500/20 rounded-full animate-spin">
                       <Loader2 className="w-6 h-6 text-purple-400" />
                     </div>
-                    <p className="text-xs text-slate-300 font-mono">
-                      Share code <strong className="text-yellow-300 font-pixel text-sm">{roomCode}</strong> with your rival!
+                    <p className="text-xs text-slate-200 font-mono">
+                      Share room code <strong className="text-yellow-300 font-pixel text-base tracking-widest">{roomCode}</strong> with your rival!
                     </p>
-                    <p className="text-[11px] text-slate-500 font-mono">
-                      Waiting for Guest player to enter code...
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      Waiting for Guest to join...
                     </p>
                   </div>
                 )}
@@ -421,7 +413,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
                   className="w-full py-4 bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-600 hover:from-emerald-400 hover:to-blue-500 disabled:opacity-40 font-pixel text-xs rounded-xl shadow-[0_0_30px_rgba(16,185,129,0.4)] transition-all active:scale-95 flex items-center justify-center space-x-2"
                 >
                   <Play className="w-5 h-5 fill-white" />
-                  <span>START MULTIPLAYER MATCH!</span>
+                  <span>START SPEED RUN RUSH MATCH!</span>
                 </button>
               </div>
             </div>
@@ -435,7 +427,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
                   <div className="text-[10px] text-purple-300 font-mono uppercase tracking-wider">
                     JOINED ROOM CODE
                   </div>
-                  <div className="text-3xl font-extrabold font-pixel text-pink-300 tracking-widest">
+                  <div className="text-4xl font-extrabold font-pixel text-pink-300 tracking-widest">
                     {roomCode}
                   </div>
                 </div>
@@ -496,10 +488,10 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
                       <Loader2 className="w-6 h-6 text-pink-400" />
                     </div>
                     <p className="text-xs text-slate-200 font-mono">
-                      Connecting to Host room <strong className="text-yellow-300 font-pixel">{roomCode}</strong>...
+                      Connecting to Host room <strong className="text-yellow-300 font-pixel text-base">{roomCode}</strong>...
                     </p>
-                    <p className="text-[11px] text-slate-500 font-mono">
-                      Establishing real-time connection...
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      Please make sure room code matches Host code exactly!
                     </p>
                   </div>
                 )}

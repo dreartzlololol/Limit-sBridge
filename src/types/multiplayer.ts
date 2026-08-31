@@ -25,14 +25,14 @@ export const POWER_UPS: Record<PowerUpType, PowerUpInfo> = {
     name: 'UI Glitch',
     icon: '⚡',
     cost: 40,
-    description: 'Distorts and shakes opponent choices for 5 seconds!',
+    description: 'Distorts opponent controls for 5 seconds!',
   },
   timeRush: {
     type: 'timeRush',
     name: 'Time Rush',
     icon: '⏱️',
     cost: 50,
-    description: 'Reduces opponent timer by 5 seconds!',
+    description: 'Subtracts 5 seconds from opponent timer!',
   },
   shield: {
     type: 'shield',
@@ -45,9 +45,8 @@ export const POWER_UPS: Record<PowerUpType, PowerUpInfo> = {
 
 export interface RoomSettings {
   roomCode: string;
-  totalRounds: number;
+  durationSec: number; // 60, 120, 180 seconds continuous match
   difficulty: 'All' | 'Basic' | 'Intermediate' | 'Advanced' | 'Expert';
-  timeLimitSec: number;
 }
 
 export interface ActiveEffect {
@@ -60,8 +59,9 @@ export interface PlayerState {
   name: string;
   vehicle: VehicleType;
   score: number;
+  levelsSolved: number; // Count of correct levels completed in continuous match
+  totalAttempted: number; // Total levels attempted
   streak: number;
-  roundIndex: number;
   currentChoice: number | string | null;
   hasAnswered: boolean;
   isCorrect: boolean | null;
@@ -75,12 +75,10 @@ export interface PlayerState {
 export type PacketType =
   | 'JOIN_REQUEST'
   | 'JOIN_ACCEPT'
-  | 'PLAYER_READY'
   | 'GAME_START'
   | 'PLAYER_UPDATE'
-  | 'CHOICE_SUBMITTED'
+  | 'LEVEL_SOLVED'
   | 'POWER_UP_CAST'
-  | 'NEXT_ROUND'
   | 'REMATCH_REQUEST'
   | 'LEAVE_ROOM';
 

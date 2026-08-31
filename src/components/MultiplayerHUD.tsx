@@ -1,5 +1,5 @@
 import React from 'react';
-import { Zap, Shield, Flame, Clock, AlertTriangle } from 'lucide-react';
+import { Zap, Shield, Flame, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { PlayerState, PowerUpType } from '../types/multiplayer';
 import { POWER_UPS } from '../types/multiplayer';
 import { soundManager } from '../utils/sound';
@@ -7,8 +7,6 @@ import { soundManager } from '../utils/sound';
 interface MultiplayerHUDProps {
   player1: PlayerState;
   player2: PlayerState;
-  currentRound: number;
-  totalRounds: number;
   timeLeftSec: number;
   onCastPowerUp: (powerUp: PowerUpType) => void;
   activeFog: boolean;
@@ -19,8 +17,6 @@ interface MultiplayerHUDProps {
 export const MultiplayerHUD: React.FC<MultiplayerHUDProps> = ({
   player1,
   player2,
-  currentRound,
-  totalRounds,
   timeLeftSec,
   onCastPowerUp,
   activeFog,
@@ -35,7 +31,7 @@ export const MultiplayerHUD: React.FC<MultiplayerHUDProps> = ({
         {/* PLAYER 1 CARD */}
         <div className="flex items-center space-x-3 flex-1 w-full justify-between md:justify-start bg-slate-950/60 p-2.5 rounded-xl border border-cyan-500/30">
           <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center font-pixel text-xs font-bold shadow-md">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center font-pixel text-xs font-bold shadow-md text-white">
               P1
             </div>
             <div>
@@ -49,34 +45,30 @@ export const MultiplayerHUD: React.FC<MultiplayerHUDProps> = ({
                 )}
               </div>
               <div className="text-[10px] text-cyan-400 font-mono capitalize">
-                Vehicle: {player1.vehicle} {player1.hasAnswered && (player1.isCorrect ? '✅ Answered' : '❌ Failed')}
+                Vehicle: {player1.vehicle}
               </div>
             </div>
           </div>
 
-          <div className="text-right">
-            <div className="text-xl font-extrabold font-pixel text-cyan-400">{player1.score}</div>
-            <div className="text-[9px] text-slate-400 font-mono">PTS</div>
+          <div className="flex items-center space-x-4">
+            <div className="text-right">
+              <div className="text-xs font-bold font-mono text-emerald-400 flex items-center justify-end space-x-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{player1.levelsSolved || 0} SOLVED</span>
+              </div>
+              <div className="text-xl font-extrabold font-pixel text-cyan-400">{player1.score} PTS</div>
+            </div>
           </div>
         </div>
 
-        {/* CENTER MATCH STATUS (ROUND & TIMER) */}
-        <div className="flex items-center space-x-4 px-4 py-1.5 bg-slate-950 rounded-xl border border-slate-800">
+        {/* CENTER CONTINUOUS MATCH TIMER */}
+        <div className="flex items-center space-x-3 px-5 py-2 bg-slate-950 rounded-xl border border-yellow-500/40 shadow-[0_0_20px_rgba(234,179,8,0.2)]">
           <div className="text-center">
-            <div className="text-[10px] text-slate-400 font-mono">ROUND</div>
-            <div className="text-sm font-bold font-pixel text-yellow-400">
-              {currentRound} / {totalRounds}
+            <div className="text-[10px] text-yellow-400 font-mono flex items-center justify-center space-x-1 uppercase tracking-wider font-bold">
+              <Clock className="w-3.5 h-3.5 text-yellow-400 animate-spin" />
+              <span>SPEED MATCH TIMER</span>
             </div>
-          </div>
-
-          <div className="h-6 w-px bg-slate-800" />
-
-          <div className="text-center">
-            <div className="text-[10px] text-slate-400 font-mono flex items-center justify-center space-x-1">
-              <Clock className="w-3 h-3 text-cyan-400" />
-              <span>TIME</span>
-            </div>
-            <div className={`text-sm font-bold font-pixel ${timeLeftSec <= 5 ? 'text-rose-400 animate-ping' : 'text-slate-100'}`}>
+            <div className={`text-xl font-extrabold font-pixel tracking-wider ${timeLeftSec <= 10 ? 'text-rose-400 animate-ping' : 'text-yellow-300'}`}>
               {timeLeftSec}s
             </div>
           </div>
@@ -84,9 +76,14 @@ export const MultiplayerHUD: React.FC<MultiplayerHUDProps> = ({
 
         {/* PLAYER 2 CARD */}
         <div className="flex items-center space-x-3 flex-1 w-full justify-between md:justify-end bg-slate-950/60 p-2.5 rounded-xl border border-pink-500/30">
-          <div className="text-left md:text-right order-2 md:order-1">
-            <div className="text-xl font-extrabold font-pixel text-pink-400">{player2.score}</div>
-            <div className="text-[9px] text-slate-400 font-mono">PTS</div>
+          <div className="flex items-center space-x-4 order-2 md:order-1">
+            <div className="text-left md:text-right">
+              <div className="text-xs font-bold font-mono text-emerald-400 flex items-center md:justify-end space-x-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{player2.levelsSolved || 0} SOLVED</span>
+              </div>
+              <div className="text-xl font-extrabold font-pixel text-pink-400">{player2.score} PTS</div>
+            </div>
           </div>
 
           <div className="flex items-center space-x-2.5 order-1 md:order-2">
@@ -101,10 +98,10 @@ export const MultiplayerHUD: React.FC<MultiplayerHUDProps> = ({
                 <span>{player2.name}</span>
               </div>
               <div className="text-[10px] text-pink-400 font-mono capitalize md:text-right">
-                Vehicle: {player2.vehicle} {player2.hasAnswered && (player2.isCorrect ? '✅ Answered' : '❌ Failed')}
+                Vehicle: {player2.vehicle}
               </div>
             </div>
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center font-pixel text-xs font-bold shadow-md">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center font-pixel text-xs font-bold shadow-md text-white">
               P2
             </div>
           </div>
@@ -119,7 +116,7 @@ export const MultiplayerHUD: React.FC<MultiplayerHUDProps> = ({
         <div className="flex items-center space-x-3 w-full sm:w-auto">
           <div className="flex items-center space-x-1 text-xs font-bold font-mono text-yellow-400">
             <Zap className="w-4 h-4 fill-yellow-400 animate-pulse" />
-            <span>ENERGY</span>
+            <span>SABOTAGE ENERGY</span>
           </div>
           <div className="w-36 h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-800 p-0.5">
             <div
@@ -168,7 +165,7 @@ export const MultiplayerHUD: React.FC<MultiplayerHUDProps> = ({
         {activeFog && (
           <div className="px-3 py-1 bg-purple-500/20 border border-purple-400/50 rounded-full text-purple-300 text-xs font-mono font-bold animate-pulse flex items-center space-x-1.5 shadow-[0_0_15px_rgba(168,85,247,0.4)]">
             <AlertTriangle className="w-3.5 h-3.5" />
-            <span>💨 FOG ATTACK ACTIVE! GRAPH BLURRED</span>
+            <span>💨 FOG SPRAY ATTACK ACTIVE! GRAPH BLURRED</span>
           </div>
         )}
 

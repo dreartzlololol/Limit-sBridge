@@ -64,18 +64,17 @@ export const App: React.FC = () => {
   const [isHost, setIsHost] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
 
-  const [currentRound, setCurrentRound] = useState<number>(1);
-  const [totalRounds, setTotalRounds] = useState<number>(5);
-  const [roundTimeLeft, setRoundTimeLeft] = useState<number>(30);
-  const [timeLimitPerRound, setTimeLimitPerRound] = useState<number>(30);
+  const [matchDurationSec, setMatchDurationSec] = useState<number>(60);
+  const [matchTimerLeft, setMatchTimerLeft] = useState<number>(60);
 
   const [player1, setPlayer1] = useState<PlayerState>({
     id: multiplayerService.getPlayerId(),
     name: 'Player 1',
     vehicle: 'car',
     score: 0,
+    levelsSolved: 0,
+    totalAttempted: 0,
     streak: 0,
-    roundIndex: 1,
     currentChoice: null,
     hasAnswered: false,
     isCorrect: null,
@@ -91,8 +90,9 @@ export const App: React.FC = () => {
     name: 'Opponent',
     vehicle: 'hoverboard',
     score: 0,
+    levelsSolved: 0,
+    totalAttempted: 0,
     streak: 0,
-    roundIndex: 1,
     currentChoice: null,
     hasAnswered: false,
     isCorrect: null,
@@ -102,8 +102,6 @@ export const App: React.FC = () => {
     isReady: true,
     isHost: false,
   });
-
-  const [matchLevelIds, setMatchLevelIds] = useState<number[]>([]);
 
   // Garage State
   const [unlockedVehicles, setUnlockedVehicles] = useState<VehicleType[]>(() => {
@@ -121,17 +119,48 @@ export const App: React.FC = () => {
   // State Refs to prevent stale closure inside network event subscribers
   const player1Ref = useRef(player1);
   const player2Ref = useRef(player2);
-  const matchLevelIdsRef = useRef(matchLevelIds);
-  const totalRoundsRef = useRef(totalRounds);
-  const currentRoundRef = useRef(currentRound);
-  const timeLimitPerRoundRef = useRef(timeLimitPerRound);
+  const matchDurationSecRef = useRef(matchDurationSec);
 
   useEffect(() => { player1Ref.current = player1; }, [player1]);
   useEffect(() => { player2Ref.current = player2; }, [player2]);
-  useEffect(() => { matchLevelIdsRef.current = matchLevelIds; }, [matchLevelIds]);
-  useEffect(() => { totalRoundsRef.current = totalRounds; }, [totalRounds]);
-  useEffect(() => { currentRoundRef.current = currentRound; }, [currentRound]);
-  useEffect(() => { timeLimitPerRoundRef.current = timeLimitPerRound; }, [timeLimitPerRound]);
+  useEffect(() => { matchDurationSecRef.current = matchDurationSec; }, [matchDurationSec]);
+
+  // Continuous Speed Run Timer Ticker (Counts down from 60s/120s/180s down to 0)
+  useEffect(() => {
+    if (!isMultiplayer || viewMode !== 'game' || isMultiplayerEndOpen) return;
+
+    const timer = setInterval(() => {
+      setMatchTimerLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setIsMultiplayerEndOpen(true);
+          soundManager.playVictory();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isMultiplayer, viewMode, isMultiplayerEndOpen]);
+
+  // Local 1v1 Mode AI opponent background speed run solver
+  useEffect(() => {
+    if (!isMultiplayer || multiplayerMode !== 'local' || viewMode !== 'game' || isMultiplayerEndOpen) return;
+
+    const aiInterval = setInterval(() => {
+      const isCorrect = Math.random() > 0.3; // 70% accuracy
+      setPlayer2((prev) => ({
+        ...prev,
+        levelsSolved: isCorrect ? prev.levelsSolved + 1 : prev.levelsSolved,
+        totalAttempted: prev.totalAttempted + 1,
+        score: prev.score + (isCorrect ? (100 + prev.streak * 20) : 0),
+        streak: isCorrect ? prev.streak + 1 : 0,
+      }));
+    }, 3500);
+
+    return () => clearInterval(aiInterval);
+  }, [isMultiplayer, multiplayerMode, viewMode, isMultiplayerEndOpen]);
 
   // Level progress tracking
   const [progress, setProgress] = useState<Record<number, LevelProgress>>(() => {
@@ -225,7 +254,7 @@ export const App: React.FC = () => {
             multiplayerService.sendPacket('JOIN_ACCEPT', {
               host: player1Ref.current,
               guest: guestPlayer,
-              settings: { totalRounds: totalRoundsRef.current, timeLimitSec: timeLimitPerRoundRef.current },
+              settings: { durationSec: matchDurationSecRef.current },
             });
           }
           break;
@@ -236,10 +265,9 @@ export const App: React.FC = () => {
           if (hostPlayer) {
             setPlayer2(hostPlayer);
             soundManager.playSuccess();
-            if (packet.payload.settings) {
-              setTotalRounds(packet.payload.settings.totalRounds);
-              setTimeLimitPerRound(packet.payload.settings.timeLimitSec);
-              setRoundTimeLeft(packet.payload.settings.timeLimitSec);
+            if (packet.payload.settings?.durationSec) {
+              setMatchDurationSec(packet.payload.settings.durationSec);
+              setMatchTimerLeft(packet.payload.settings.durationSec);
             }
             // Guest stops JOIN_REQUEST retry heartbeat
             multiplayerService.stopHeartbeat();
@@ -248,33 +276,25 @@ export const App: React.FC = () => {
         }
 
         case 'GAME_START': {
-          const levels = packet.payload.levels as number[];
-          if (levels && levels.length > 0) {
-            setMatchLevelIds(levels);
-            matchLevelIdsRef.current = levels;
-            setCurrentRound(1);
-            setCurrentLevelId(levels[0]);
-            setRoundTimeLeft(timeLimitPerRoundRef.current || 30);
-            setIsMultiplayerEndOpen(false);
-            setIsMultiplayer(true);
-            setIsMultiplayerLobbyOpen(false);
-            setViewMode('game');
-            soundManager.playBGM();
-            multiplayerService.stopHeartbeat();
-          }
+          setMatchTimerLeft(packet.payload.durationSec || matchDurationSecRef.current || 60);
+          setIsMultiplayerEndOpen(false);
+          setIsMultiplayer(true);
+          setIsMultiplayerLobbyOpen(false);
+          setViewMode('game');
+          soundManager.playBGM();
+          multiplayerService.stopHeartbeat();
           break;
         }
 
-        case 'CHOICE_SUBMITTED': {
-          const { playerId, choice, isCorrect } = packet.payload;
+        case 'LEVEL_SOLVED': {
+          const { playerId, isCorrect, levelsSolved, score, streak } = packet.payload;
           if (playerId !== player1Ref.current.id) {
             setPlayer2((prev) => ({
               ...prev,
-              hasAnswered: true,
-              currentChoice: choice,
+              levelsSolved,
+              score,
+              streak,
               isCorrect,
-              score: prev.score + (isCorrect ? 100 : 0),
-              streak: isCorrect ? prev.streak + 1 : 0,
             }));
           }
           break;
@@ -284,45 +304,31 @@ export const App: React.FC = () => {
           const { powerUp, targetId } = packet.payload;
           if (targetId === player1Ref.current.id || packet.senderId !== player1Ref.current.id) {
             soundManager.playAttack();
-            const hasShield = player1Ref.current.activeEffects.some((e: any) => e.type === 'shield');
-            if (hasShield) {
-              setPlayer1((prev) => ({
-                ...prev,
-                activeEffects: prev.activeEffects.filter((e: any) => e.type !== 'shield'),
-              }));
+            if (powerUp === 'timeRush') {
+              // Time Rush subtracts 5s from your timer!
+              setMatchTimerLeft((prev) => Math.max(1, prev - 5));
             } else {
-              const durationMs = powerUp === 'fog' ? 6000 : 5000;
-              const expiresAt = Date.now() + durationMs;
-              setPlayer1((prev) => ({
-                ...prev,
-                activeEffects: [...prev.activeEffects, { type: powerUp, expiresAt }],
-              }));
-              setTimeout(() => {
+              const hasShield = player1Ref.current.activeEffects.some((e: any) => e.type === 'shield');
+              if (hasShield) {
                 setPlayer1((prev) => ({
                   ...prev,
-                  activeEffects: prev.activeEffects.filter((e) => e.expiresAt > Date.now()),
+                  activeEffects: prev.activeEffects.filter((e: any) => e.type !== 'shield'),
                 }));
-              }, durationMs);
+              } else {
+                const durationMs = powerUp === 'fog' ? 6000 : 5000;
+                const expiresAt = Date.now() + durationMs;
+                setPlayer1((prev) => ({
+                  ...prev,
+                  activeEffects: [...prev.activeEffects, { type: powerUp, expiresAt }],
+                }));
+                setTimeout(() => {
+                  setPlayer1((prev) => ({
+                    ...prev,
+                    activeEffects: prev.activeEffects.filter((e) => e.expiresAt > Date.now()),
+                  }));
+                }, durationMs);
+              }
             }
-          }
-          break;
-        }
-
-        case 'NEXT_ROUND': {
-          const nextR = packet.payload.roundIndex;
-          const levelId = packet.payload.levelId;
-          const maxR = totalRoundsRef.current;
-          if (nextR <= maxR) {
-            setCurrentRound(nextR);
-            if (levelId) setCurrentLevelId(levelId);
-            setRoundTimeLeft(timeLimitPerRoundRef.current);
-            setSelectedChoice(null);
-            setIsDriving(false);
-            setDriveResult('none');
-            setPlayer1((prev) => ({ ...prev, hasAnswered: false, currentChoice: null, isCorrect: null }));
-            setPlayer2((prev) => ({ ...prev, hasAnswered: false, currentChoice: null, isCorrect: null }));
-          } else {
-            setIsMultiplayerEndOpen(true);
           }
           break;
         }
@@ -346,17 +352,17 @@ export const App: React.FC = () => {
     setRoomCode(code);
     setIsHost(true);
     setMultiplayerMode('online_host');
-    setTotalRounds(settings.totalRounds);
-    setTimeLimitPerRound(settings.timeLimitSec);
-    setRoundTimeLeft(settings.timeLimitSec);
+    setMatchDurationSec(settings.durationSec);
+    setMatchTimerLeft(settings.durationSec);
 
     const hostP: PlayerState = {
       id: multiplayerService.getPlayerId(),
       name,
       vehicle,
       score: 0,
+      levelsSolved: 0,
+      totalAttempted: 0,
       streak: 0,
-      roundIndex: 1,
       currentChoice: null,
       hasAnswered: false,
       isCorrect: null,
@@ -373,8 +379,9 @@ export const App: React.FC = () => {
       name: 'Waiting...',
       vehicle: 'hoverboard',
       score: 0,
+      levelsSolved: 0,
+      totalAttempted: 0,
       streak: 0,
-      roundIndex: 1,
       currentChoice: null,
       hasAnswered: false,
       isCorrect: null,
@@ -400,8 +407,9 @@ export const App: React.FC = () => {
       name,
       vehicle,
       score: 0,
+      levelsSolved: 0,
+      totalAttempted: 0,
       streak: 0,
-      roundIndex: 1,
       currentChoice: null,
       hasAnswered: false,
       isCorrect: null,
@@ -418,8 +426,9 @@ export const App: React.FC = () => {
       name: 'Host',
       vehicle: 'car',
       score: 0,
+      levelsSolved: 0,
+      totalAttempted: 0,
       streak: 0,
-      roundIndex: 1,
       currentChoice: null,
       hasAnswered: false,
       isCorrect: null,
@@ -450,19 +459,19 @@ export const App: React.FC = () => {
     setIsMultiplayer(false);
   };
 
-  const handleStartLocalGame = (name: string, vehicle: VehicleType, rounds: number) => {
+  const handleStartLocalGame = (name: string, vehicle: VehicleType, durationSec: number) => {
     setMultiplayerMode('local');
     setIsMultiplayer(true);
-    setTotalRounds(rounds);
-    setCurrentRound(1);
-    setRoundTimeLeft(30);
-    setTimeLimitPerRound(30);
+    setMatchDurationSec(durationSec);
+    setMatchTimerLeft(durationSec);
 
     setPlayer1((prev) => ({
       ...prev,
       name,
       vehicle,
       score: 0,
+      levelsSolved: 0,
+      totalAttempted: 0,
       streak: 0,
       energy: 50,
     }));
@@ -472,8 +481,9 @@ export const App: React.FC = () => {
       name: 'P2 Rival',
       vehicle: vehicle === 'car' ? 'hoverboard' : 'car',
       score: 0,
+      levelsSolved: 0,
+      totalAttempted: 0,
       streak: 0,
-      roundIndex: 1,
       currentChoice: null,
       hasAnswered: false,
       isCorrect: null,
@@ -484,12 +494,8 @@ export const App: React.FC = () => {
       isHost: false,
     });
 
-    const pickedLevels: number[] = [];
-    for (let i = 0; i < rounds; i++) {
-      pickedLevels.push(Math.floor(Math.random() * LEVELS.length) + 1);
-    }
-    setMatchLevelIds(pickedLevels);
-    setCurrentLevelId(pickedLevels[0]);
+    const firstLvl = Math.floor(Math.random() * LEVELS.length) + 1;
+    setCurrentLevelId(firstLvl);
 
     setIsMultiplayerLobbyOpen(false);
     setViewMode('game');
@@ -497,20 +503,12 @@ export const App: React.FC = () => {
   };
 
   const handleStartOnlineMatch = () => {
-    const pickedLevels: number[] = [];
-    const rCount = totalRoundsRef.current || 5;
-    for (let i = 0; i < rCount; i++) {
-      pickedLevels.push(Math.floor(Math.random() * LEVELS.length) + 1);
-    }
-    setMatchLevelIds(pickedLevels);
-    matchLevelIdsRef.current = pickedLevels;
-    setCurrentRound(1);
-    setCurrentLevelId(pickedLevels[0]);
-    setRoundTimeLeft(timeLimitPerRoundRef.current || 30);
+    const dur = matchDurationSecRef.current || 60;
+    setMatchTimerLeft(dur);
     setIsMultiplayerEndOpen(false);
     setIsMultiplayer(true);
 
-    multiplayerService.sendPacket('GAME_START', { levels: pickedLevels });
+    multiplayerService.sendPacket('GAME_START', { durationSec: dur });
     setIsMultiplayerLobbyOpen(false);
     setViewMode('game');
     soundManager.playBGM();
@@ -532,32 +530,6 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleNextMultiplayerRound = () => {
-    const currR = currentRoundRef.current;
-    const nextR = currR + 1;
-    const maxR = totalRoundsRef.current;
-
-    if (nextR <= maxR) {
-      const levelsList = matchLevelIdsRef.current;
-      const nextLevelId = levelsList[nextR - 1] || Math.floor(Math.random() * LEVELS.length) + 1;
-
-      setCurrentRound(nextR);
-      setCurrentLevelId(nextLevelId);
-      setRoundTimeLeft(timeLimitPerRoundRef.current);
-      setSelectedChoice(null);
-      setIsDriving(false);
-      setDriveResult('none');
-      setPlayer1((prev) => ({ ...prev, hasAnswered: false, currentChoice: null, isCorrect: null }));
-      setPlayer2((prev) => ({ ...prev, hasAnswered: false, currentChoice: null, isCorrect: null }));
-
-      if (isHost && multiplayerMode !== 'local') {
-        multiplayerService.sendPacket('NEXT_ROUND', { roundIndex: nextR, levelId: nextLevelId });
-      }
-    } else {
-      setIsMultiplayerEndOpen(true);
-    }
-  };
-
   // Trigger vehicle test drive
   const handleStartDrive = () => {
     if (selectedChoice === null || isDriving) return;
@@ -577,62 +549,55 @@ export const App: React.FC = () => {
         spread: 90,
         origin: { y: 0.5 },
       });
-
-      if (isMultiplayer) {
-        setTimeout(() => {
-          handleNextMultiplayerRound();
-        }, 1800);
-        return;
-      }
-
-      // Calculate Stars
-      const starsEarned = showHint ? 2 : 3;
-
-      // Update progress
-      setProgress((prev) => {
-        const current = prev[level.id] || { levelId: level.id, unlocked: true, completed: false, stars: 0 };
-        const nextLevelId = level.id + 1;
-
-        const updated = {
-          ...prev,
-          [level.id]: {
-            ...current,
-            completed: true,
-            stars: Math.max(current.stars || 0, starsEarned),
-          },
-        };
-
-        if (nextLevelId <= LEVELS.length) {
-          updated[nextLevelId] = {
-            ...(updated[nextLevelId] || { levelId: nextLevelId }),
-            unlocked: true,
-          };
-        }
-
-        return updated;
-      });
-
-      setIsWinModalOpen(true);
     } else {
-      // FULL-SCREEN CRASH EXPLOSION & EVERYTHING BREAKS & FALLS WITH GRAVITY!
       setDriveResult('crashed');
       setIsExploding(true);
       soundManager.playExplosion();
+    }
 
-      if (isMultiplayer) {
-        setTimeout(() => {
-          setIsExploding(false);
-          handleNextMultiplayerRound();
-        }, 1800);
-        return;
-      }
-
-      // Wait 1.5 seconds before popping up Retry Screen Modal
+    if (isMultiplayer) {
+      // Continuous speed run loop: automatically load next level after 0.8s without stopping!
       setTimeout(() => {
         setIsExploding(false);
-        setIsRetryModalOpen(true);
-      }, 1500);
+        setDriveResult('none');
+        setSelectedChoice(null);
+        setIsDriving(false);
+
+        const nextLevelId = Math.floor(Math.random() * LEVELS.length) + 1;
+        setCurrentLevelId(nextLevelId);
+
+        setPlayer1((prev) => ({ ...prev, hasAnswered: false, currentChoice: null, isCorrect: null }));
+      }, 800);
+      return;
     }
+
+    // Single Player mode logic
+    const starsEarned = showHint ? 2 : 3;
+
+    setProgress((prev) => {
+      const current = prev[level.id] || { levelId: level.id, unlocked: true, completed: false, stars: 0 };
+      const nextLevelId = level.id + 1;
+
+      const updated = {
+        ...prev,
+        [level.id]: {
+          ...current,
+          completed: true,
+          stars: Math.max(current.stars || 0, starsEarned),
+        },
+      };
+
+      if (nextLevelId <= LEVELS.length) {
+        updated[nextLevelId] = {
+          ...(updated[nextLevelId] || { levelId: nextLevelId }),
+          unlocked: true,
+        };
+      }
+
+      return updated;
+    });
+
+    setIsWinModalOpen(true);
   };
 
   // Handle Choice Selection
@@ -643,40 +608,31 @@ export const App: React.FC = () => {
 
     if (isMultiplayer) {
       const isCorrect = val === level.correctChoiceValue;
-      const points = isCorrect ? (100 + roundTimeLeft * 2 + player1.streak * 20) : 0;
+      const newSolved = isCorrect ? player1.levelsSolved + 1 : player1.levelsSolved;
+      const newScore = player1.score + (isCorrect ? (100 + player1.streak * 20) : 0);
+      const newStreak = isCorrect ? player1.streak + 1 : 0;
 
       setPlayer1((prev) => ({
         ...prev,
         hasAnswered: true,
         currentChoice: val,
         isCorrect,
-        score: prev.score + points,
-        streak: isCorrect ? prev.streak + 1 : 0,
-        energy: Math.min(100, prev.energy + (isCorrect ? 30 : 0)),
+        levelsSolved: newSolved,
+        totalAttempted: prev.totalAttempted + 1,
+        score: newScore,
+        streak: newStreak,
+        energy: Math.min(100, prev.energy + (isCorrect ? 25 : 0)),
       }));
 
-      multiplayerService.sendPacket('CHOICE_SUBMITTED', {
+      multiplayerService.sendPacket('LEVEL_SOLVED', {
         playerId: player1.id,
-        choice: val,
         isCorrect,
-        timeSpentSec: timeLimitPerRound - roundTimeLeft,
+        levelsSolved: newSolved,
+        score: newScore,
+        streak: newStreak,
       });
 
-      // Sim local opponent choice in local 1v1 mode
-      if (multiplayerMode === 'local') {
-        const p2Correct = Math.random() > 0.3; // 70% chance rival answers correctly
-        const p2Points = p2Correct ? (100 + Math.floor(Math.random() * 20)) : 0;
-        setPlayer2((prev) => ({
-          ...prev,
-          hasAnswered: true,
-          currentChoice: p2Correct ? level.correctChoiceValue : 'wrong',
-          isCorrect: p2Correct,
-          score: prev.score + p2Points,
-          streak: p2Correct ? prev.streak + 1 : 0,
-        }));
-      }
-
-      // Auto start drive test drive in multiplayer!
+      // Auto start drive in continuous speed run mode!
       setIsDriving(true);
     }
   };
@@ -794,9 +750,7 @@ export const App: React.FC = () => {
           <MultiplayerHUD
             player1={player1}
             player2={player2}
-            currentRound={currentRound}
-            totalRounds={totalRounds}
-            timeLeftSec={roundTimeLeft}
+            timeLeftSec={matchTimerLeft}
             onCastPowerUp={handleCastPowerUp}
             activeFog={player1.activeEffects.some((e) => e.type === 'fog')}
             activeGlitch={player1.activeEffects.some((e) => e.type === 'glitch')}
@@ -1161,11 +1115,11 @@ export const App: React.FC = () => {
         isOpen={isMultiplayerEndOpen}
         player1={player1}
         player2={player2}
-        totalRounds={totalRounds}
+        durationSec={matchDurationSec}
         onRematch={() => {
           setIsMultiplayerEndOpen(false);
           if (multiplayerMode === 'local') {
-            handleStartLocalGame(player1.name, player1.vehicle, totalRounds);
+            handleStartLocalGame(player1.name, player1.vehicle, matchDurationSec);
           } else {
             handleStartOnlineMatch();
           }

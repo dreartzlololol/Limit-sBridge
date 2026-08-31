@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { Trophy, RefreshCw, LogOut } from 'lucide-react';
+import { Trophy, RefreshCw, LogOut, CheckCircle2 } from 'lucide-react';
 import type { PlayerState } from '../types/multiplayer';
 import { soundManager } from '../utils/sound';
 
@@ -8,7 +8,7 @@ interface MultiplayerEndModalProps {
   isOpen: boolean;
   player1: PlayerState;
   player2: PlayerState;
-  totalRounds: number;
+  durationSec: number;
   onRematch: () => void;
   onExit: () => void;
 }
@@ -17,29 +17,32 @@ export const MultiplayerEndModal: React.FC<MultiplayerEndModalProps> = ({
   isOpen,
   player1,
   player2,
-  totalRounds,
+  durationSec,
   onRematch,
   onExit,
 }) => {
+  const isWinner =
+    player1.levelsSolved > player2.levelsSolved ||
+    (player1.levelsSolved === player2.levelsSolved && player1.score > player2.score);
+  const isDraw =
+    player1.levelsSolved === player2.levelsSolved && player1.score === player2.score;
+
   useEffect(() => {
     if (isOpen) {
-      if (player1.score > player2.score) {
+      if (isWinner) {
         soundManager.playVictory();
         confetti({
           particleCount: 200,
           spread: 100,
           origin: { y: 0.5 },
         });
-      } else {
+      } else if (!isDraw) {
         soundManager.playError();
       }
     }
-  }, [isOpen, player1.score, player2.score]);
+  }, [isOpen, isWinner, isDraw]);
 
   if (!isOpen) return null;
-
-  const isWinner = player1.score > player2.score;
-  const isDraw = player1.score === player2.score;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
@@ -52,7 +55,7 @@ export const MultiplayerEndModal: React.FC<MultiplayerEndModalProps> = ({
         <div className="relative z-10 space-y-2">
           <div className="inline-flex items-center space-x-2 px-4 py-1.5 bg-yellow-500/10 border border-yellow-500/30 rounded-full text-yellow-400 text-xs font-semibold tracking-wider uppercase">
             <Trophy className="w-4 h-4 fill-yellow-400" />
-            <span>MATCH COMPLETE • {totalRounds} ROUNDS</span>
+            <span>SPEED RUN FINISHED • {durationSec} SECONDS</span>
           </div>
 
           <h1 className="text-4xl md:text-5xl font-extrabold font-pixel tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-yellow-300 to-pink-500">
@@ -61,10 +64,10 @@ export const MultiplayerEndModal: React.FC<MultiplayerEndModalProps> = ({
 
           <p className="text-xs text-slate-300 font-medium">
             {isDraw
-              ? 'Both limits engineers matched skill for skill!'
+              ? 'Both limits engineers matched speed and accuracy level for level!'
               : isWinner
-              ? `Congratulations! ${player1.name} dominated the calculus bridge duel!`
-              : `${player2.name} took the victory this time. Practice makes perfect!`}
+              ? `Congratulations! ${player1.name} solved ${player1.levelsSolved} levels to win the Speed Run Duel!`
+              : `${player2.name} solved ${player2.levelsSolved} levels to win this match. Practice makes master!`}
           </p>
         </div>
 
@@ -76,8 +79,14 @@ export const MultiplayerEndModal: React.FC<MultiplayerEndModalProps> = ({
           }`}>
             {isWinner && <span className="text-xs font-pixel text-yellow-300">👑 WINNER</span>}
             <div className="text-sm font-bold text-slate-100">{player1.name}</div>
-            <div className="text-3xl font-extrabold font-pixel text-cyan-400">{player1.score}</div>
-            <div className="text-[10px] text-slate-400 font-mono">TOTAL POINTS</div>
+            
+            <div className="flex items-center justify-center space-x-1 text-emerald-400 font-pixel font-bold text-lg">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{player1.levelsSolved} SOLVED</span>
+            </div>
+
+            <div className="text-2xl font-extrabold font-pixel text-cyan-400">{player1.score} PTS</div>
+            <div className="text-[10px] text-slate-400 font-mono">TOTAL SCORE</div>
           </div>
 
           {/* Player 2 Stat */}
@@ -86,8 +95,14 @@ export const MultiplayerEndModal: React.FC<MultiplayerEndModalProps> = ({
           }`}>
             {!isWinner && !isDraw && <span className="text-xs font-pixel text-yellow-300">👑 WINNER</span>}
             <div className="text-sm font-bold text-slate-100">{player2.name}</div>
-            <div className="text-3xl font-extrabold font-pixel text-pink-400">{player2.score}</div>
-            <div className="text-[10px] text-slate-400 font-mono">TOTAL POINTS</div>
+
+            <div className="flex items-center justify-center space-x-1 text-emerald-400 font-pixel font-bold text-lg">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{player2.levelsSolved} SOLVED</span>
+            </div>
+
+            <div className="text-2xl font-extrabold font-pixel text-pink-400">{player2.score} PTS</div>
+            <div className="text-[10px] text-slate-400 font-mono">TOTAL SCORE</div>
           </div>
         </div>
 
@@ -101,7 +116,7 @@ export const MultiplayerEndModal: React.FC<MultiplayerEndModalProps> = ({
             className="w-full sm:w-auto flex-1 py-3.5 px-6 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 font-pixel text-xs rounded-xl shadow-[0_0_25px_rgba(0,240,255,0.4)] transition-all active:scale-95 flex items-center justify-center space-x-2"
           >
             <RefreshCw className="w-4 h-4" />
-            <span>REMATCH</span>
+            <span>REMATCH SPEED RUN</span>
           </button>
 
           <button

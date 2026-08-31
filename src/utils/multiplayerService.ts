@@ -15,6 +15,7 @@ class MultiplayerService {
   private peer: Peer | null = null;
   private connection: any = null;
   private broadcastChannel: BroadcastChannel | null = null;
+  private wsRelay: WebSocket | null = null;
   private packetListeners: Set<PacketCallback> = new Set();
   private localPlayerId: string = '';
   private currentRoomCode: string = '';
@@ -41,12 +42,15 @@ class MultiplayerService {
     return Math.floor(1000 + Math.random() * 9000).toString();
   }
 
+  // Create room as Host
   public async createRoom(roomCode: string): Promise<boolean> {
-    this.currentRoomCode = roomCode;
-    this.initBroadcastChannel(roomCode);
+    const cleanCode = roomCode.trim().toUpperCase();
+    this.currentRoomCode = cleanCode;
+    this.initBroadcastChannel(cleanCode);
+    this.initWebSocketRelay(cleanCode);
 
     return new Promise((resolve) => {
-      const peerId = `limitbridge-room-${roomCode.toLowerCase()}`;
+      const peerId = `limitbridge-room-${cleanCode}`;
       
       try {
         if (this.peer) this.peer.destroy();
@@ -58,35 +62,37 @@ class MultiplayerService {
         });
 
         this.peer.on('open', () => {
-          console.log(`[Multiplayer] Peer Host open with ID: ${peerId}`);
+          console.log(`[Multiplayer] Host Peer opened: ${peerId}`);
           this.isConnected = true;
           resolve(true);
         });
 
         this.peer.on('connection', (conn: any) => {
-          console.log(`[Multiplayer] Incoming connection from guest: ${conn.peer}`);
+          console.log(`[Multiplayer] WebRTC Incoming connection from guest: ${conn.peer}`);
           this.connection = conn;
           this.setupConnectionListeners(conn);
         });
 
         this.peer.on('error', (err: any) => {
-          console.warn(`[Multiplayer] Peer Host error:`, err);
-          // Resolve true anyway so BroadcastChannel handles local multi-tab!
+          console.warn(`[Multiplayer] Host Peer notice:`, err);
           resolve(true);
         });
       } catch (e) {
-        console.warn(`[Multiplayer] Peer init error:`, e);
+        console.warn(`[Multiplayer] Host Peer init fallback:`, e);
         resolve(true);
       }
     });
   }
 
+  // Join room as Guest
   public async joinRoom(roomCode: string): Promise<boolean> {
-    this.currentRoomCode = roomCode;
-    this.initBroadcastChannel(roomCode);
+    const cleanCode = roomCode.trim().toUpperCase();
+    this.currentRoomCode = cleanCode;
+    this.initBroadcastChannel(cleanCode);
+    this.initWebSocketRelay(cleanCode);
 
     return new Promise((resolve) => {
-      const targetPeerId = `limitbridge-room-${roomCode.toLowerCase()}`;
+      const targetPeerId = `limitbridge-room-${cleanCode}`;
       
       try {
         if (this.peer) this.peer.destroy();
@@ -98,35 +104,35 @@ class MultiplayerService {
         });
 
         this.peer.on('open', () => {
-          console.log(`[Multiplayer] Client Peer open, connecting to Host: ${targetPeerId}`);
+          console.log(`[Multiplayer] Guest Peer opened, connecting to Host: ${targetPeerId}`);
           if (!this.peer) return;
 
           const conn = this.peer.connect(targetPeerId, { reliable: true });
           this.connection = conn;
 
           conn.on('open', () => {
-            console.log(`[Multiplayer] WebRTC connected to Host!`);
+            console.log(`[Multiplayer] WebRTC DataChannel connected to Host!`);
             this.isConnected = true;
             this.setupConnectionListeners(conn);
             resolve(true);
           });
 
           conn.on('error', (err: any) => {
-            console.warn(`[Multiplayer] Connection error:`, err);
+            console.warn(`[Multiplayer] Connection warning:`, err);
             resolve(true);
           });
 
           setTimeout(() => {
             resolve(true);
-          }, 2000);
+          }, 1500);
         });
 
         this.peer.on('error', (err: any) => {
-          console.warn(`[Multiplayer] Peer client error:`, err);
+          console.warn(`[Multiplayer] Guest Peer notice:`, err);
           resolve(true);
         });
       } catch (e) {
-        console.warn(`[Multiplayer] Peer join error:`, e);
+        console.warn(`[Multiplayer] Guest Peer join fallback:`, e);
         resolve(true);
       }
     });
@@ -134,7 +140,7 @@ class MultiplayerService {
 
   private initBroadcastChannel(roomCode: string) {
     if (this.broadcastChannel) {
-      this.broadcastChannel.close();
+      try { this.broadcastChannel.close(); } catch {}
     }
     try {
       this.broadcastChannel = new BroadcastChannel(`limit_bridge_room_${roomCode}`);
@@ -145,7 +151,29 @@ class MultiplayerService {
         }
       };
     } catch (e) {
-      console.warn('BroadcastChannel not supported:', e);
+      console.warn('BroadcastChannel fallback enabled');
+    }
+  }
+
+  private initWebSocketRelay(roomCode: string) {
+    if (this.wsRelay) {
+      try { this.wsRelay.close(); } catch {}
+    }
+    // Simple public WebSocket relay as additional fallback
+    try {
+      const wsUrl = `wss://socketsbay.com/wss/v2/1/limit_bridge_room_${roomCode}/`;
+      this.wsRelay = new WebSocket(wsUrl);
+      
+      this.wsRelay.onmessage = (event) => {
+        try {
+          const packet = JSON.parse(event.data) as NetworkPacket;
+          if (packet && packet.senderId !== this.localPlayerId) {
+            this.notifyListeners(packet);
+          }
+        } catch {}
+      };
+    } catch (e) {
+      // Ignore if offline
     }
   }
 
@@ -194,23 +222,30 @@ class MultiplayerService {
       timestamp: Date.now(),
     };
 
-    // Send via WebRTC if connected
-    if (this.connection) {
+    // 1. Send via WebRTC if available
+    if (this.connection && this.connection.open) {
       try {
-        if (this.connection.open) {
-          this.connection.send(packet);
-        }
+        this.connection.send(packet);
       } catch (err) {
         console.warn('WebRTC send error:', err);
       }
     }
 
-    // Send via BroadcastChannel for local multi-tab / same machine
+    // 2. Send via BroadcastChannel (local tabs / same device)
     if (this.broadcastChannel) {
       try {
         this.broadcastChannel.postMessage(packet);
       } catch (err) {
         console.warn('BroadcastChannel post error:', err);
+      }
+    }
+
+    // 3. Send via WebSocket Relay fallback
+    if (this.wsRelay && this.wsRelay.readyState === WebSocket.OPEN) {
+      try {
+        this.wsRelay.send(JSON.stringify(packet));
+      } catch (err) {
+        console.warn('WS Relay error:', err);
       }
     }
   }
@@ -239,6 +274,10 @@ class MultiplayerService {
     if (this.broadcastChannel) {
       try { this.broadcastChannel.close(); } catch {}
       this.broadcastChannel = null;
+    }
+    if (this.wsRelay) {
+      try { this.wsRelay.close(); } catch {}
+      this.wsRelay = null;
     }
     this.isConnected = false;
   }
