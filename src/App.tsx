@@ -556,6 +556,31 @@ export const App: React.FC = () => {
     }
 
     if (isMultiplayer) {
+      const isCorrect = success;
+      const newSolved = isCorrect ? player1.levelsSolved + 1 : player1.levelsSolved;
+      const newScore = player1.score + (isCorrect ? (100 + player1.streak * 20) : 0);
+      const newStreak = isCorrect ? player1.streak + 1 : 0;
+
+      setPlayer1((prev) => ({
+        ...prev,
+        hasAnswered: true,
+        currentChoice: selectedChoice,
+        isCorrect,
+        levelsSolved: newSolved,
+        totalAttempted: prev.totalAttempted + 1,
+        score: newScore,
+        streak: newStreak,
+        energy: Math.min(100, prev.energy + (isCorrect ? 25 : 0)),
+      }));
+
+      multiplayerService.sendPacket('LEVEL_SOLVED', {
+        playerId: player1.id,
+        isCorrect,
+        levelsSolved: newSolved,
+        score: newScore,
+        streak: newStreak,
+      });
+
       // Continuous speed run loop: automatically load next level after 0.8s without stopping!
       setTimeout(() => {
         setIsExploding(false);
@@ -605,36 +630,6 @@ export const App: React.FC = () => {
     soundManager.playClick();
     setSelectedChoice(val);
     setDriveResult('none');
-
-    if (isMultiplayer) {
-      const isCorrect = val === level.correctChoiceValue;
-      const newSolved = isCorrect ? player1.levelsSolved + 1 : player1.levelsSolved;
-      const newScore = player1.score + (isCorrect ? (100 + player1.streak * 20) : 0);
-      const newStreak = isCorrect ? player1.streak + 1 : 0;
-
-      setPlayer1((prev) => ({
-        ...prev,
-        hasAnswered: true,
-        currentChoice: val,
-        isCorrect,
-        levelsSolved: newSolved,
-        totalAttempted: prev.totalAttempted + 1,
-        score: newScore,
-        streak: newStreak,
-        energy: Math.min(100, prev.energy + (isCorrect ? 25 : 0)),
-      }));
-
-      multiplayerService.sendPacket('LEVEL_SOLVED', {
-        playerId: player1.id,
-        isCorrect,
-        levelsSolved: newSolved,
-        score: newScore,
-        streak: newStreak,
-      });
-
-      // Auto start drive in continuous speed run mode!
-      setIsDriving(true);
-    }
   };
 
   // Next level handler

@@ -119,14 +119,15 @@ body {
  align-items: center;
  justify-content: center;
  gap: 8px;
+ white-space: nowrap;
 }
 
 .btn-uiverse::after, .btn-uiverse::before {
  content: '';
  display: block;
  height: 100%;
- width: 100%;
- transform: skew(90deg) translate(-50%, -50%);
+ width: 0%;
+ transform: skew(45deg) translate(-50%, -50%);
  position: absolute;
  inset: 50%;
  left: 25%;
@@ -138,14 +139,16 @@ body {
 .btn-uiverse::before {
  top: -50%;
  left: -25%;
- transform: skew(90deg) rotate(180deg) translate(-50%, -50%);
+ transform: skew(45deg) rotate(180deg) translate(-50%, -50%);
 }
 
 .btn-uiverse:hover::before {
+ width: 100%;
  transform: skew(45deg) rotate(180deg) translate(-50%, -50%);
 }
 
 .btn-uiverse:hover::after {
+ width: 100%;
  transform: skew(45deg) translate(-50%, -50%);
 }
 

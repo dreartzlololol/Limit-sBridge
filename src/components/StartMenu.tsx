@@ -95,50 +95,54 @@ export const StartMenu: React.FC<StartMenuProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-xl mx-auto pt-2">
+        <div className="flex flex-col items-center justify-center gap-6 max-w-2xl mx-auto pt-6">
+          {/* Main Start Button */}
           <button
             onClick={() => {
               soundManager.playSuccess();
               onStartGame();
             }}
-            className="btn-uiverse w-full sm:w-auto flex-1 font-pixel text-sm shadow-[0_0_30px_rgba(0,240,255,0.4)] group"
+            className="w-full sm:w-80 py-4 px-6 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 rounded-2xl shadow-[0_0_40px_rgba(0,240,255,0.6)] font-pixel text-lg sm:text-xl text-white transition-all duration-300 active:scale-95 group flex items-center justify-center space-x-3 border-2 border-cyan-300 animate-pulseGlow"
           >
-            <Play className="w-5 h-5 fill-white transition-transform group-hover:scale-110" />
+            <Play className="w-6 h-6 fill-white transition-transform duration-300 group-hover:scale-125" />
             <span>PRESS START</span>
           </button>
 
-          <button
-            onClick={() => {
-              soundManager.playSuccess();
-              onOpenMultiplayer();
-            }}
-            className="btn-uiverse w-full sm:w-auto font-pixel text-xs shadow-[0_0_25px_rgba(236,72,153,0.5)] border-pink-500/60 bg-gradient-to-r from-purple-900/60 to-pink-900/60 hover:from-purple-800 hover:to-pink-800"
-          >
-            <Swords className="w-4 h-4 text-pink-400 animate-pulse" />
-            <span>VS MULTIPLAYER</span>
-          </button>
+          {/* Secondary Buttons Row */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full">
+            <button
+              onClick={() => {
+                soundManager.playSuccess();
+                onOpenMultiplayer();
+              }}
+              className="btn-uiverse w-full sm:w-auto font-pixel text-xs shadow-[0_0_25px_rgba(236,72,153,0.5)] border-pink-500/60 bg-gradient-to-r from-purple-900/60 to-pink-900/60 hover:from-purple-800 hover:to-pink-800"
+            >
+              <Swords className="w-4 h-4 text-pink-400 animate-pulse" />
+              <span>VS MULTIPLAYER</span>
+            </button>
 
-          <button
-            onClick={() => {
-              soundManager.playClick();
-              onOpenLevelSelect();
-            }}
-            className="btn-uiverse w-full sm:w-auto font-pixel text-xs shadow-lg"
-          >
-            <Grid className="w-4 h-4 text-cyan-400" />
-            <span>LEVELS</span>
-          </button>
+            <button
+              onClick={() => {
+                soundManager.playClick();
+                onOpenLevelSelect();
+              }}
+              className="btn-uiverse w-full sm:w-auto font-pixel text-xs shadow-lg"
+            >
+              <Grid className="w-4 h-4 text-cyan-400" />
+              <span>LEVELS</span>
+            </button>
 
-          <button
-            onClick={() => {
-              soundManager.playClick();
-              onOpenGarage();
-            }}
-            className="btn-uiverse w-full sm:w-auto font-pixel text-xs shadow-lg"
-          >
-            <Zap className="w-4 h-4 text-pink-400" />
-            <span>GARAGE</span>
-          </button>
+            <button
+              onClick={() => {
+                soundManager.playClick();
+                onOpenGarage();
+              }}
+              className="btn-uiverse w-full sm:w-auto font-pixel text-xs shadow-lg"
+            >
+              <Zap className="w-4 h-4 text-pink-400" />
+              <span>GARAGE</span>
+            </button>
+          </div>
         </div>
       </main>
 
