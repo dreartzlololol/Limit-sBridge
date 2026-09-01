@@ -183,18 +183,25 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         const sx = toScreenX(currentX, canvasRef.current.width);
         const sy = toScreenY(currentY, canvasRef.current.height);
         if (Number.isFinite(sx) && Number.isFinite(sy)) {
-          for (let i = 0; i < 3; i++) {
-            particlesRef.current.push({
-              x: sx - 22,
-              y: sy - 4 + (Math.random() - 0.5) * 4,
-              vx: -Math.random() * 3 - 1.5,
-              vy: (Math.random() - 0.5) * 2 - 0.5,
-              life: 0,
-              maxLife: 15 + Math.random() * 10,
-              color: Math.random() < 0.5 ? '#f59e0b' : '#ff0055',
-              size: Math.random() < 0.5 ? 4 : 2,
-            });
-          }
+              let particleColor = Math.random() < 0.5 ? '#f59e0b' : '#ff0055'; // default car/motorcycle
+              if (equippedVehicle === 'hoverboard') {
+                particleColor = Math.random() < 0.5 ? '#00f0ff' : '#0891b2';
+              } else if (equippedVehicle === 'spaceship' || equippedVehicle === 'ufo') {
+                particleColor = Math.random() < 0.5 ? '#a855f7' : '#e879f9';
+              } else if (equippedVehicle === 'time_machine') {
+                particleColor = Math.random() < 0.5 ? '#38bdf8' : '#ffffff';
+              }
+
+              particlesRef.current.push({
+                x: sx - 22,
+                y: sy - 4 + (Math.random() - 0.5) * 4,
+                vx: -Math.random() * 3 - 1.5,
+                vy: (Math.random() - 0.5) * 2 - 0.5,
+                life: 0,
+                maxLife: 15 + Math.random() * 10,
+                color: particleColor,
+                size: Math.random() < 0.5 ? 4 : 2,
+              });
         }
       }
 
@@ -206,7 +213,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [carStatus, carX, level, isChoiceCorrect, baseXMax, toScreenX, toScreenY, onDriveComplete]);
+  }, [carStatus, carX, level, isChoiceCorrect, baseXMax, toScreenX, toScreenY, onDriveComplete, equippedVehicle]);
 
   // Main Canvas Render loop
   useEffect(() => {
@@ -628,17 +635,34 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
       ctx.translate(carSx, carSy);
 
       if (carStatus === 'crashed') {
+        const explosionRadius = (timeTick * 35) % 120; // Expanding ring
+        
         ctx.shadowColor = '#ff0055';
-        ctx.shadowBlur = 30;
+        ctx.shadowBlur = 40;
+        
+        // Inner fireball
         ctx.fillStyle = '#ff0055';
-        ctx.fillRect(-24, -24, 48, 48);
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.min(30, explosionRadius), 0, Math.PI * 2);
+        ctx.fill();
 
         ctx.fillStyle = '#fbbf24';
-        ctx.fillRect(-14, -14, 28, 28);
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.min(20, explosionRadius * 0.7), 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Shockwave ring
+        ctx.strokeStyle = `rgba(255, 0, 234, ${Math.max(0, 1 - explosionRadius/120)})`;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, explosionRadius, 0, Math.PI * 2);
+        ctx.stroke();
 
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 14px "Press Start 2P", monospace';
-        ctx.fillText('BOOM!', -30, -32);
+        ctx.shadowBlur = 10;
+        ctx.font = 'bold 12px "Press Start 2P", monospace';
+        ctx.fillText('CRITICAL', -40, -42);
+        ctx.fillText('FAILURE', -35, -25);
       } else {
         // Rotate car to match road slope!
         ctx.rotate(roadAngle);
@@ -883,6 +907,47 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           ctx.lineTo(16, 20);
           ctx.lineTo(-16, 20);
           ctx.fill();
+        } else if (equippedVehicle === 'time_machine') {
+          // --- TIME MACHINE (DELOREAN) ---
+          ctx.shadowColor = '#38bdf8';
+          ctx.shadowBlur = 15;
+
+          // Main Body
+          ctx.fillStyle = '#94a3b8'; // Silver
+          ctx.fillRect(-18, -4, 38, 8);
+          ctx.fillRect(-12, -8, 20, 4);
+
+          // Windows
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(-6, -8, 12, 4);
+
+          // Flux bands (glowing blue)
+          ctx.fillStyle = '#38bdf8';
+          ctx.fillRect(-18, -2, 38, 2);
+          ctx.fillRect(-16, -6, 24, 2);
+
+          // Wheels (Hover mode)
+          ctx.fillStyle = '#000000';
+          ctx.beginPath();
+          ctx.ellipse(-12, 6, 6, 2, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(14, 6, 6, 2, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Wheel glowing centers
+          ctx.fillStyle = '#00f0ff';
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.ellipse(-12, 6, 3, 1, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(14, 6, 3, 1, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Back Thrusters
+          ctx.fillStyle = '#fbbf24';
+          ctx.fillRect(-22, -2, 4, 4);
         }
       }
       ctx.restore();
@@ -974,7 +1039,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
       ref={containerRef}
       className={`relative transition-all duration-300 w-full h-[380px] md:h-[460px] bg-slate-950 rounded-2xl overflow-hidden border-2 border-cyan-500/60 shadow-[0_0_30px_rgba(0,240,255,0.25)] crt-overlay ${
         isGlitched ? 'animate-bounce skew-x-2 blur-[1px]' : ''
-      }`}
+      } ${carStatus === 'crashed' ? 'animate-screenShake' : ''}`}
     >
       <canvas ref={canvasRef} className={`w-full h-full block cursor-crosshair ${isFogged ? 'blur-md opacity-40 transition-all duration-500' : ''}`} />
 

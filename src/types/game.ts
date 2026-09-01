@@ -1,6 +1,6 @@
 export type Difficulty = 'Basic' | 'Intermediate' | 'Advanced' | 'Expert';
 
-export type VehicleType = 'car' | 'hoverboard' | 'spaceship' | 'motorcycle' | 'ufo';
+export type VehicleType = 'car' | 'hoverboard' | 'spaceship' | 'motorcycle' | 'ufo' | 'time_machine';
 
 export interface TableRow {
   xLeft: number;

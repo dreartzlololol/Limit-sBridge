@@ -48,6 +48,13 @@ const VEHICLES = [
     cost: 60,
     desc: 'Out of this world tech.',
     color: '#f59e0b'
+  },
+  {
+    type: 'time_machine' as VehicleType,
+    name: 'Time Machine',
+    cost: 88,
+    desc: 'Reach 88mph to break the limit barrier.',
+    color: '#cbd5e1'
   }
 ];
 
